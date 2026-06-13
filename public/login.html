@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>השכונתית · כניסת מנהל</title>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root{--cream:#F7F3EA;--charcoal:#1F1E1C;--green:#5BBF3A;--green-dark:#46992C;--line:#E4DCCB}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Heebo',sans-serif;background:var(--cream);color:var(--charcoal);
+      min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{width:100%;max-width:380px;background:#FBF8F1;border:1px solid var(--line);
+      border-radius:22px;padding:32px 26px;box-shadow:0 12px 40px -16px rgba(31,30,28,.25)}
+    .logo{width:64px;height:64px;margin:0 auto 16px;border-radius:18px;background:var(--charcoal);
+      display:flex;align-items:center;justify-content:center}
+    .logo span{font-weight:900;font-size:26px;color:var(--green)}
+    h1{text-align:center;font-size:21px;margin:0 0 24px}
+    label{display:block;font-weight:700;font-size:14px;margin:0 0 6px}
+    input{width:100%;padding:13px 14px;font-size:16px;font-family:inherit;border:1.5px solid var(--line);
+      border-radius:12px;margin-bottom:16px;background:#fff}
+    input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 4px rgba(91,191,58,.15)}
+    button{width:100%;padding:14px;border:none;border-radius:14px;background:var(--green);color:#fff;
+      font-family:inherit;font-weight:900;font-size:17px;cursor:pointer}
+    button:hover{background:var(--green-dark)}
+    .err{color:#C0392B;font-size:14px;text-align:center;margin-top:14px;min-height:18px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><span>ש</span></div>
+    <h1>כניסת מנהל</h1>
+    <form id="loginForm">
+      <label for="u">שם משתמש</label>
+      <input id="u" autocomplete="username" required />
+      <label for="p">סיסמה</label>
+      <input id="p" type="password" autocomplete="current-password" required />
+      <button type="submit">התחברות</button>
+      <div class="err" id="err"></div>
+    </form>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('err'); err.textContent = '';
+      const res = await fetch('/api/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('u').value, password: document.getElementById('p').value }),
+      });
+      if (res.ok) location.href = '/admin';
+      else err.textContent = (await res.json()).error || 'שגיאה';
+    });
+  </script>
+</body>
+</html>

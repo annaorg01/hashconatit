@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>השכונתית · CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root{--cream:#F7F3EA;--cream-2:#FBF8F1;--charcoal:#1F1E1C;--soft:#6B6760;
+      --green:#5BBF3A;--green-dark:#46992C;--line:#E4DCCB;--err:#C0392B}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Heebo',sans-serif;background:var(--cream);color:var(--charcoal)}
+    header{background:var(--charcoal);color:#fff;padding:14px 20px;display:flex;align-items:center;
+      justify-content:space-between;position:sticky;top:0;z-index:20}
+    header .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:18px}
+    header .brand b{color:var(--green)}
+    header button{background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;
+      border-radius:10px;padding:7px 14px;font-family:inherit;cursor:pointer;font-weight:700}
+    .wrap{max-width:1100px;margin:0 auto;padding:22px 18px 70px}
+    .tabs{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap}
+    .tab{padding:10px 18px;border-radius:12px;border:1.5px solid var(--line);background:var(--cream-2);
+      cursor:pointer;font-family:inherit;font-weight:700;font-size:15px}
+    .tab.active{background:var(--charcoal);color:#fff;border-color:var(--charcoal)}
+    .panel{background:var(--cream-2);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:20px}
+    .panel h2{margin:0 0 16px;font-size:18px}
+    .hidden{display:none}
+    /* KPIs */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+    .stat{background:var(--cream-2);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+    .stat .n{font-size:30px;font-weight:900;line-height:1}
+    .stat .l{color:var(--soft);font-size:13px;font-weight:600;margin-top:4px}
+    /* charts */
+    .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media(max-width:720px){.charts{grid-template-columns:1fr}}
+    .chartbox{background:var(--cream-2);border:1px solid var(--line);border-radius:16px;padding:16px}
+    .chartbox h3{margin:0 0 12px;font-size:15px}
+    .chartbox.full{grid-column:1/-1}
+    canvas{max-height:260px}
+    /* controls */
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+    input,select,textarea{font-family:inherit;font-size:15px;border:1.5px solid var(--line);
+      border-radius:11px;padding:10px 12px;background:#fff;color:var(--charcoal)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(91,191,58,.15)}
+    .btn{background:var(--green);color:#fff;border:none;border-radius:11px;padding:10px 18px;
+      font-family:inherit;font-weight:800;cursor:pointer;font-size:15px}
+    .btn:hover{background:var(--green-dark)}
+    .btn.ghost{background:#fff;color:var(--charcoal);border:1.5px solid var(--line)}
+    .btn.danger{background:#fff;color:var(--err);border:1.5px solid #e7c3bd}
+    .btn.sm{padding:6px 12px;font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{text-align:right;padding:11px 10px;border-bottom:1px solid var(--line)}
+    th{color:var(--soft);font-size:12.5px;font-weight:700}
+    tbody tr{cursor:pointer}
+    tbody tr:hover{background:rgba(91,191,58,.06)}
+    .pill{display:inline-block;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
+    .pill.green{background:rgba(91,191,58,.15);color:var(--green-dark)}
+    .pill.no{background:rgba(192,57,43,.12);color:var(--err)}
+    .pill.s-חדש{background:#e8eef7;color:#2c5aa0}
+    .pill.s-פעיל{background:rgba(91,191,58,.15);color:var(--green-dark)}
+    .pill\.s-VIP,.pill.s-VIP{background:#f7ecd6;color:#9a6b16}
+    .pill.s-לא-פעיל{background:#eee;color:#777}
+    .tagchip{display:inline-block;background:#efe9db;border-radius:8px;padding:1px 8px;font-size:11.5px;margin:1px 2px}
+    /* campaign builder */
+    .row{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:16px}
+    .col{flex:1;min-width:240px}
+    fieldset{border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin:0}
+    legend{font-weight:800;font-size:13px;padding:0 6px}
+    .chk{display:inline-flex;align-items:center;gap:7px;margin:5px 14px 5px 0;font-weight:600;cursor:pointer}
+    .chk input{width:18px;height:18px;accent-color:var(--green)}
+    textarea{width:100%;min-height:110px;resize:vertical}
+    .hint{font-size:12.5px;color:var(--soft);margin-top:6px}
+    .legal{background:rgba(91,191,58,.1);border:1px solid rgba(91,191,58,.3);border-radius:12px;
+      padding:11px 14px;font-size:13px;color:var(--green-dark);font-weight:600;margin-bottom:16px}
+    /* promotions */
+    .promo-list{display:flex;flex-direction:column;gap:10px}
+    .promo-item{display:flex;gap:12px;align-items:center;background:#fff;border:1.5px solid var(--line);
+      border-radius:14px;padding:12px 14px}
+    .promo-item .ic{font-size:26px}
+    .promo-item .info{flex:1;min-width:0}
+    .promo-item .info b{font-size:15px}
+    .promo-item .info small{display:block;color:var(--soft)}
+    .promo-item.off{opacity:.5}
+    /* modal */
+    .overlay{position:fixed;inset:0;background:rgba(31,30,28,.5);display:none;align-items:center;
+      justify-content:center;z-index:50;padding:18px}
+    .overlay.show{display:flex}
+    .modal{background:var(--cream);border-radius:20px;max-width:520px;width:100%;max-height:90vh;
+      overflow:auto;padding:24px;box-shadow:0 20px 60px -20px rgba(0,0,0,.5)}
+    .modal h2{margin:0 0 4px;font-size:20px}
+    .modal .meta{color:var(--soft);font-size:14px;margin-bottom:16px}
+    .modal label{display:block;font-weight:700;font-size:13px;margin:12px 0 6px}
+    .modal .x{float:left;cursor:pointer;font-size:22px;color:var(--soft);border:none;background:none}
+    .hist{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+    .hist .h{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+    .hist .h .when{color:var(--soft);font-size:11.5px}
+    .toast{position:fixed;bottom:20px;right:20px;background:var(--charcoal);color:#fff;padding:14px 20px;
+      border-radius:14px;font-weight:700;box-shadow:0 10px 30px -10px rgba(0,0,0,.5);opacity:0;
+      transform:translateY(10px);transition:.25s;pointer-events:none;z-index:60}
+    .toast.show{opacity:1;transform:none}
+    .empty{text-align:center;color:var(--soft);padding:24px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><b>ש</b> השכונתית · CRM</div>
+    <button id="logoutBtn">התנתקות</button>
+  </header>
+
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" data-tab="dash">📊 לוח מחוונים</button>
+      <button class="tab" data-tab="leads">👥 לקוחות</button>
+      <button class="tab" data-tab="promos">🏷️ מבצעים</button>
+      <button class="tab" data-tab="campaign">📣 שליחת קמפיין</button>
+      <button class="tab" data-tab="history">🕓 היסטוריה</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section id="tab-dash">
+      <div class="stats" id="kpis"></div>
+      <div class="charts">
+        <div class="chartbox full"><h3>הרשמות לאורך זמן</h3><canvas id="chDay"></canvas></div>
+        <div class="chartbox"><h3>לקוחות לפי מכונה</h3><canvas id="chMachine"></canvas></div>
+        <div class="chartbox"><h3>סטטוס לקוחות</h3><canvas id="chStatus"></canvas></div>
+      </div>
+    </section>
+
+    <!-- LEADS -->
+    <section id="tab-leads" class="panel hidden">
+      <h2>לקוחות</h2>
+      <div class="controls">
+        <input id="search" placeholder="חיפוש לפי שם / טלפון / מייל / תגית" />
+        <select id="machineFilter"><option value="">כל המכונות</option></select>
+        <select id="statusFilter">
+          <option value="">כל הסטטוסים</option>
+          <option>חדש</option><option>פעיל</option><option>VIP</option><option>לא פעיל</option>
+        </select>
+        <button class="btn ghost" id="refreshBtn">רענון</button>
+        <button class="btn" id="exportBtn">⬇ ייצוא ל-CSV/Excel</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>שם</th><th>טלפון</th><th>מכונה</th><th>סטטוס</th><th>תגיות</th><th>דיוור</th><th>נרשם</th></tr></thead>
+          <tbody id="leadsBody"></tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:10px">לחיצה על שורה פותחת את כרטיס הלקוח 👆</div>
+    </section>
+
+    <!-- PROMOTIONS -->
+    <section id="tab-promos" class="panel hidden">
+      <h2>ניהול מבצעים</h2>
+      <div class="hint" style="margin-bottom:14px">המבצעים הפעילים מוצגים אוטומטית במסך הלקוח (דף ה-QR).</div>
+      <form id="promoForm" class="row" style="align-items:flex-end">
+        <div class="col" style="min-width:120px;flex:0 0 90px">
+          <label style="font-weight:800;font-size:13px">אייקון</label>
+          <input id="pEmoji" value="🌿" style="width:100%;text-align:center;font-size:20px" maxlength="4" />
+        </div>
+        <div class="col">
+          <label style="font-weight:800;font-size:13px">כותרת *</label>
+          <input id="pTitle" style="width:100%" placeholder="1+1 על כל המשקאות" />
+        </div>
+        <div class="col">
+          <label style="font-weight:800;font-size:13px">תווית</label>
+          <input id="pBadge" style="width:100%" placeholder="חדש / מוגבל" />
+        </div>
+        <div class="col" style="flex:1 1 100%">
+          <label style="font-weight:800;font-size:13px">תיאור</label>
+          <input id="pDesc" style="width:100%" placeholder="בכל קנייה מעל 10 ₪" />
+        </div>
+        <div class="col" style="flex:0 0 auto">
+          <button type="submit" class="btn" id="pSubmit">➕ הוספת מבצע</button>
+          <button type="button" class="btn ghost hidden" id="pCancel">ביטול</button>
+        </div>
+      </form>
+      <div class="promo-list" id="promoList" style="margin-top:18px"></div>
+    </section>
+
+    <!-- CAMPAIGN -->
+    <section id="tab-campaign" class="panel hidden">
+      <h2>סטודיו שליחת קמפיינים</h2>
+      <div class="legal">⚖️ נשלח רק ללקוחות שאישרו דיוור (חוק הספאם). לקוחות ללא אישור לא ייכללו.</div>
+      <form id="campaignForm">
+        <div class="row">
+          <div class="col"><fieldset><legend>ערוצי שליחה</legend>
+            <label class="chk"><input type="checkbox" name="ch" value="sms"> SMS</label>
+            <label class="chk"><input type="checkbox" name="ch" value="email"> אימייל</label>
+            <label class="chk"><input type="checkbox" name="ch" value="whatsapp"> וואטסאפ</label>
+          </fieldset></div>
+          <div class="col"><fieldset><legend>קהל יעד</legend>
+            <label class="chk"><input type="radio" name="aud" value="group" checked> קבוצה</label>
+            <label class="chk"><input type="radio" name="aud" value="single"> נמען בודד</label>
+            <div id="groupOpts" style="margin-top:10px"><select id="audMachine" style="width:100%"><option value="">כל הלקוחות</option></select></div>
+            <div id="singleOpts" style="margin-top:10px" class="hidden"><input id="audSearch" style="width:100%" placeholder="טלפון או שם" /></div>
+          </fieldset></div>
+        </div>
+        <label style="font-weight:800;font-size:14px;display:block;margin-bottom:7px">תוכן ההודעה</label>
+        <textarea id="body" placeholder="היי {{full_name}}, יש לנו הטבה בשבילך בשכונתית! 🌿"></textarea>
+        <div class="hint">תגיות דינמיות: <code>{{full_name}}</code> · <code>{{machine_id}}</code> · <code>{{phone}}</code></div>
+        <div class="row" style="margin-top:16px;align-items:flex-end">
+          <div class="col">
+            <label style="font-weight:800;font-size:14px;display:block;margin-bottom:7px">מדיה (JPG/PNG/MP4) — לא חובה</label>
+            <input type="file" id="media" accept=".jpg,.jpeg,.png,.mp4" />
+          </div>
+          <div class="col">
+            <label class="chk"><input type="radio" name="when" value="now" checked> שליחה עכשיו</label>
+            <label class="chk"><input type="radio" name="when" value="later"> תזמון</label>
+            <input type="datetime-local" id="scheduleAt" class="hidden" style="width:100%;margin-top:8px" />
+          </div>
+        </div>
+        <button type="submit" class="btn" style="margin-top:18px;font-size:16px;padding:13px 28px" id="sendBtn">🚀 שליחת קמפיין</button>
+      </form>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="tab-history" class="panel hidden">
+      <h2>היסטוריית קמפיינים</h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>#</th><th>ערוצים</th><th>נמענים</th><th>נשלחו</th><th>סטטוס</th><th>נוצר</th></tr></thead>
+        <tbody id="histBody"></tbody>
+      </table></div>
+    </section>
+  </div>
+
+  <!-- CUSTOMER CARD MODAL -->
+  <div class="overlay" id="overlay">
+    <div class="modal" id="cardModal">
+      <button class="x" id="cardClose">✕</button>
+      <h2 id="cardName"></h2>
+      <div class="meta" id="cardMeta"></div>
+      <input type="hidden" id="cardId" />
+      <label>סטטוס</label>
+      <select id="cardStatus" style="width:100%">
+        <option>חדש</option><option>פעיל</option><option>VIP</option><option>לא פעיל</option>
+      </select>
+      <label>תגיות (מופרדות בפסיקים)</label>
+      <input id="cardTags" style="width:100%" placeholder="אוהב קפה, מבניין א" />
+      <label>הערות</label>
+      <textarea id="cardNotes" style="min-height:80px"></textarea>
+      <button class="btn" id="cardSave" style="margin-top:14px;width:100%">💾 שמירה</button>
+      <div class="hist">
+        <b style="font-size:14px">היסטוריית הודעות שנשלחו</b>
+        <div id="cardHist" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const toast = m => { const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3200); };
+    const fmt = s => s ? new Date(String(s).replace(' ','T')+'Z').toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'}) : '';
+    const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    let charts = {};
+
+    // ---- Tabs ----
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+      ['dash','leads','promos','campaign','history'].forEach(id => $('#tab-'+id).classList.toggle('hidden', id!==t.dataset.tab));
+      if (t.dataset.tab==='dash') loadDashboard();
+      if (t.dataset.tab==='leads') { loadMachines(); loadLeads(); }
+      if (t.dataset.tab==='promos') loadPromos();
+      if (t.dataset.tab==='history') loadCampaigns();
+      if (t.dataset.tab==='campaign') loadMachines();
+    }));
+
+    $('#logoutBtn').addEventListener('click', async () => { await fetch('/api/admin/logout',{method:'POST'}); location.href='/admin/login'; });
+
+    // ================= DASHBOARD =================
+    async function loadDashboard(){
+      const r = await fetch('/api/admin/dashboard');
+      if (r.status===401) return location.href='/admin/login';
+      const d = await r.json();
+      const t = d.totals||{};
+      $('#kpis').innerHTML = `
+        <div class="stat"><div class="n">${t.leads||0}</div><div class="l">סה"כ לקוחות</div></div>
+        <div class="stat"><div class="n">${t.consented||0}</div><div class="l">אישרו דיוור</div></div>
+        <div class="stat"><div class="n">${t.campaigns||0}</div><div class="l">קמפיינים</div></div>
+        <div class="stat"><div class="n">${t.messages_sent||0}</div><div class="l">הודעות שנשלחו</div></div>`;
+      drawLine('chDay', (d.by_day||[]).map(x=>x[0]), (d.by_day||[]).map(x=>x[1]));
+      drawBar('chMachine', (d.by_machine||[]).map(x=>x[0]), (d.by_machine||[]).map(x=>x[1]));
+      drawDoughnut('chStatus', (d.by_status||[]).map(x=>x[0]), (d.by_status||[]).map(x=>x[1]));
+    }
+    const GREEN='#5BBF3A', CH='#1F1E1C';
+    function fresh(id){ if(charts[id]) charts[id].destroy(); return $('#'+id).getContext('2d'); }
+    function drawLine(id,labels,data){ charts[id]=new Chart(fresh(id),{type:'line',data:{labels,datasets:[{data,borderColor:GREEN,backgroundColor:'rgba(91,191,58,.15)',fill:true,tension:.3}]},options:opts()}); }
+    function drawBar(id,labels,data){ charts[id]=new Chart(fresh(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:GREEN}]},options:opts()}); }
+    function drawDoughnut(id,labels,data){ charts[id]=new Chart(fresh(id),{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:['#5BBF3A','#2c5aa0','#9a6b16','#999','#C0392B']}]},options:{plugins:{legend:{position:'bottom'}}}}); }
+    function opts(){ return {plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}; }
+
+    // ================= LEADS =================
+    async function loadMachines(){
+      const r = await fetch('/api/admin/stats'); if(r.status===401) return location.href='/admin/login';
+      const { machines } = await r.json();
+      const opts = '<option value="">כל המכונות</option>' + machines.map(m=>`<option value="${esc(m.machine_id)}">${esc(m.machine_id)} (${m.count})</option>`).join('');
+      $('#machineFilter').innerHTML = opts;
+      $('#audMachine').innerHTML = '<option value="">כל הלקוחות</option>' + machines.map(m=>`<option value="${esc(m.machine_id)}">${esc(m.machine_id)} (${m.count})</option>`).join('');
+    }
+    async function loadLeads(){
+      const q = new URLSearchParams();
+      if ($('#search').value) q.set('search',$('#search').value);
+      if ($('#machineFilter').value) q.set('machine_id',$('#machineFilter').value);
+      if ($('#statusFilter').value) q.set('status',$('#statusFilter').value);
+      const r = await fetch('/api/admin/leads?'+q); const { leads } = await r.json();
+      $('#leadsBody').innerHTML = (leads||[]).map(l => `
+        <tr data-id="${esc(l.id)}">
+          <td><b>${esc(l.full_name)}</b></td><td>${esc(l.phone)}</td><td>${esc(l.machine_id)}</td>
+          <td><span class="pill s-${esc((l.status||'חדש').replace(/\s/g,'-'))}">${esc(l.status||'חדש')}</span></td>
+          <td>${(l.tags||'').split(',').filter(Boolean).map(t=>`<span class="tagchip">${esc(t.trim())}</span>`).join('')||'—'}</td>
+          <td>${l.consent_granted?'<span class="pill green">מאושר</span>':'<span class="pill no">לא</span>'}</td>
+          <td>${fmt(l.created_at)}</td>
+        </tr>`).join('') || '<tr><td colspan="7" class="empty">אין לקוחות עדיין</td></tr>';
+      document.querySelectorAll('#leadsBody tr[data-id]').forEach(tr => tr.addEventListener('click', ()=>openCard(tr.dataset.id)));
+    }
+    $('#refreshBtn').addEventListener('click', loadLeads);
+    $('#search').addEventListener('input', ()=>{ clearTimeout(window._t); window._t=setTimeout(loadLeads,300); });
+    $('#machineFilter').addEventListener('change', loadLeads);
+    $('#statusFilter').addEventListener('change', loadLeads);
+    $('#exportBtn').addEventListener('click', ()=>{
+      const q=new URLSearchParams();
+      if($('#search').value)q.set('search',$('#search').value);
+      if($('#machineFilter').value)q.set('machine_id',$('#machineFilter').value);
+      location.href='/api/admin/leads/export?'+q;
+    });
+
+    // ---- Customer card ----
+    async function openCard(id){
+      const r = await fetch('/api/admin/leads/'+encodeURIComponent(id));
+      if(!r.ok) return toast('שגיאה בטעינת הכרטיס');
+      const { lead, history } = await r.json();
+      $('#cardId').value = lead.id;
+      $('#cardName').textContent = lead.full_name;
+      $('#cardMeta').innerHTML = `📞 ${esc(lead.phone)} ${lead.email?'· ✉️ '+esc(lead.email):''} · 🏢 ${esc(lead.machine_id)} · נרשם ${fmt(lead.created_at)}`;
+      $('#cardStatus').value = lead.status||'חדש';
+      $('#cardTags').value = lead.tags||'';
+      $('#cardNotes').value = lead.notes||'';
+      $('#cardHist').innerHTML = (history&&history.length)
+        ? history.map(h=>`<div class="h"><div class="when">${fmt(h.created_at)} · ${esc(JSON.parse(h.channels||'[]').join(', '))}</div>${esc(h.body)}</div>`).join('')
+        : '<div class="empty" style="padding:10px">עדיין לא נשלחו הודעות ללקוח זה</div>';
+      $('#overlay').classList.add('show');
+    }
+    $('#cardClose').addEventListener('click', ()=>$('#overlay').classList.remove('show'));
+    $('#overlay').addEventListener('click', e=>{ if(e.target===$('#overlay')) $('#overlay').classList.remove('show'); });
+    $('#cardSave').addEventListener('click', async ()=>{
+      const id=$('#cardId').value;
+      const r = await fetch('/api/admin/leads/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({status:$('#cardStatus').value,tags:$('#cardTags').value,notes:$('#cardNotes').value})});
+      if(r.ok){ toast('✅ נשמר'); $('#overlay').classList.remove('show'); loadLeads(); }
+      else toast('⚠ שגיאה בשמירה');
+    });
+
+    // ================= PROMOTIONS =================
+    let editingPromo = null;
+    async function loadPromos(){
+      const r = await fetch('/api/admin/promotions'); const { promotions } = await r.json();
+      $('#promoList').innerHTML = (promotions||[]).map(p=>`
+        <div class="promo-item ${p.active?'':'off'}">
+          <div class="ic">${esc(p.emoji||'🌿')}</div>
+          <div class="info"><b>${esc(p.title)}</b> ${p.badge?`<span class="pill green">${esc(p.badge)}</span>`:''}<small>${esc(p.description||'')}</small></div>
+          <button class="btn ghost sm" data-act="toggle" data-id="${esc(p.id)}">${p.active?'הסתר':'הצג'}</button>
+          <button class="btn ghost sm" data-act="edit" data-id="${esc(p.id)}">עריכה</button>
+          <button class="btn danger sm" data-act="del" data-id="${esc(p.id)}">מחיקה</button>
+        </div>`).join('') || '<div class="empty">אין מבצעים עדיין — הוסיפו אחד למעלה 👆</div>';
+      // attach
+      $('#promoList').querySelectorAll('button[data-act]').forEach(b=>b.addEventListener('click', ()=>promoAction(b.dataset.act,b.dataset.id,promotions)));
+    }
+    async function promoAction(act,id,list){
+      const p = list.find(x=>String(x.id)===String(id));
+      if(act==='toggle'){ await fetch('/api/admin/promotions/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!p.active})}); loadPromos(); }
+      if(act==='del'){ if(confirm('למחוק את המבצע?')){ await fetch('/api/admin/promotions/'+id,{method:'DELETE'}); loadPromos(); } }
+      if(act==='edit'){ editingPromo=id; $('#pEmoji').value=p.emoji||'🌿'; $('#pTitle').value=p.title; $('#pBadge').value=p.badge||''; $('#pDesc').value=p.description||'';
+        $('#pSubmit').textContent='💾 עדכון מבצע'; $('#pCancel').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+    }
+    $('#pCancel').addEventListener('click', resetPromoForm);
+    function resetPromoForm(){ editingPromo=null; $('#promoForm').reset(); $('#pEmoji').value='🌿'; $('#pSubmit').textContent='➕ הוספת מבצע'; $('#pCancel').classList.add('hidden'); }
+    $('#promoForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      if(!$('#pTitle').value.trim()) return toast('כותרת חובה');
+      const payload={emoji:$('#pEmoji').value||'🌿',title:$('#pTitle').value.trim(),badge:$('#pBadge').value.trim(),description:$('#pDesc').value.trim()};
+      let r;
+      if(editingPromo) r=await fetch('/api/admin/promotions/'+editingPromo,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      else r=await fetch('/api/admin/promotions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,active:true})});
+      if(r.ok){ toast(editingPromo?'✅ עודכן':'✅ נוסף'); resetPromoForm(); loadPromos(); } else toast('⚠ שגיאה');
+    });
+
+    // ================= CAMPAIGN =================
+    document.querySelectorAll('input[name=aud]').forEach(r=>r.addEventListener('change',()=>{
+      const single=document.querySelector('input[name=aud]:checked').value==='single';
+      $('#singleOpts').classList.toggle('hidden',!single); $('#groupOpts').classList.toggle('hidden',single);
+    }));
+    document.querySelectorAll('input[name=when]').forEach(r=>r.addEventListener('change',()=>{
+      $('#scheduleAt').classList.toggle('hidden',document.querySelector('input[name=when]:checked').value!=='later');
+    }));
+    $('#campaignForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const channels=[...document.querySelectorAll('input[name=ch]:checked')].map(c=>c.value);
+      if(!channels.length) return toast('בחר/י לפחות ערוץ אחד');
+      if(!$('#body').value.trim()) return toast('יש להזין תוכן הודעה');
+      const audMode=document.querySelector('input[name=aud]:checked').value;
+      const audience=audMode==='single'
+        ? {mode:'single',search:$('#audSearch').value.trim(),phone:$('#audSearch').value.replace(/\D/g,'').length===10?$('#audSearch').value.replace(/\D/g,''):undefined}
+        : {mode:'group',machine_id:$('#audMachine').value||undefined};
+      const fd=new FormData();
+      fd.append('channels',JSON.stringify(channels)); fd.append('audience',JSON.stringify(audience)); fd.append('body',$('#body').value.trim());
+      if(document.querySelector('input[name=when]:checked').value==='later'&&$('#scheduleAt').value) fd.append('scheduled_at',new Date($('#scheduleAt').value).toISOString());
+      if($('#media').files[0]) fd.append('media',$('#media').files[0]);
+      const btn=$('#sendBtn'); btn.disabled=true; btn.textContent='שולח...';
+      try{
+        const r=await fetch('/api/admin/campaigns',{method:'POST',body:fd}); const d=await r.json();
+        if(!r.ok) throw new Error(d.error||'שגיאה');
+        toast(d.scheduled?'✅ הקמפיין תוזמן':`✅ נשלח ל-${d.campaign.sent_count}/${d.campaign.recipients} נמענים`);
+        $('#campaignForm').reset(); $('#scheduleAt').classList.add('hidden'); $('#singleOpts').classList.add('hidden'); $('#groupOpts').classList.remove('hidden');
+      }catch(err){ toast('⚠ '+err.message); } finally{ btn.disabled=false; btn.textContent='🚀 שליחת קמפיין'; }
+    });
+
+    // ================= HISTORY =================
+    async function loadCampaigns(){
+      const r=await fetch('/api/admin/campaigns'); const { campaigns }=await r.json();
+      const sh={sent:'נשלח',scheduled:'מתוזמן',pending:'ממתין',failed:'נכשל'};
+      $('#histBody').innerHTML=(campaigns||[]).map(c=>`
+        <tr><td>${esc(c.id)}</td><td>${esc(JSON.parse(c.channels||'[]').join(', '))}</td>
+        <td>${c.recipients}</td><td>${c.sent_count}</td><td>${sh[c.status]||c.status}</td><td>${fmt(c.created_at)}</td></tr>`).join('')
+        || '<tr><td colspan="6" class="empty">אין קמפיינים עדיין</td></tr>';
+    }
+
+    // init
+    loadDashboard();
+  </script>
+</body>
+</html>

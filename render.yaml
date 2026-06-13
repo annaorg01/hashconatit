@@ -1,0 +1,65 @@
+# ==========================================================
+#  Render deployment blueprint — השכונתית
+#  Render reads this file automatically when you create a
+#  "Blueprint" from your GitHub repo. It builds & runs the app.
+# ==========================================================
+services:
+  - type: web
+    name: hashchunatit
+    runtime: node
+    plan: free                 # שדרגי ל-Starter כדי לקבל דיסק קבוע (ראי הערה למטה)
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # --- הגדרות חובה (ממלאים בלוח Render, לא נשמרות בקוד) ---
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true     # Render ייצר מחרוזת אקראית מאובטחת
+      - key: PUBLIC_BASE_URL
+        sync: false             # הכתובת הסופית, למשל https://hashchunatit.onrender.com
+      # --- מסד נתונים: Google Sheets ---
+      - key: SHEETS_API_BASE
+        value: https://sheets-connector.vercel.app/api/v1
+      - key: SHEETS_PROJECT_ID
+        value: c1014db5-9794-41ef-8887-3aae4bdb9c71
+      - key: SHEETS_API_KEY
+        sync: false
+      - key: SHEETS_LEADS_TABLE
+        value: Leads
+      - key: SHEETS_CAMPAIGNS_TABLE
+        value: Campaigns
+      - key: SHEETS_PROMOTIONS_TABLE
+        value: Promotions
+      # --- ספקי הודעות (אופציונלי — ממלאים רק את מה שמשתמשים בו) ---
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_SMS_FROM
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: MAKE_WEBHOOK_URL
+        sync: false
+
+# ==========================================================
+#  ✅ שמירת נתונים: כל הלידים נשמרים ב-Google Sheets דרך ה-API,
+#     כך שאין תלות בדיסק של Render — גם בתוכנית החינמית הנתונים
+#     בטוחים. חובה רק למלא SHEETS_API_KEY בלוח Render.
+# ==========================================================
