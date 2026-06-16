@@ -56,6 +56,13 @@
     .join .sub{text-align:center;color:var(--charcoal-soft);font-size:14px;margin:0 0 18px;font-weight:500}
     label{display:block;font-weight:700;font-size:14px;margin:0 0 7px}
     .req{color:var(--green-dark)}
+    select.field-select{width:100%;padding:13px 15px;font-size:16px;font-family:inherit;
+      border:1.5px solid var(--line);border-radius:13px;background:#fff;color:var(--charcoal);
+      appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236B6760' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;background-position:left 14px center;
+      transition:border-color .15s,box-shadow .15s}
+    select.field-select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 4px rgba(91,191,58,.15)}
+    select.field-select.invalid{border-color:var(--err);box-shadow:0 0 0 4px rgba(192,57,43,.12)}
     input[type=text],input[type=tel],input[type=email]{width:100%;padding:13px 15px;font-size:16px;
       font-family:inherit;border:1.5px solid var(--line);border-radius:13px;background:#fff;color:var(--charcoal);
       transition:border-color .15s, box-shadow .15s}
@@ -75,6 +82,11 @@
     button.cta:active{transform:scale(.985)}
     button.cta:disabled{opacity:.6;cursor:not-allowed;box-shadow:none}
     .machine-tag{text-align:center;font-size:12px;color:var(--charcoal-soft);margin-top:14px;opacity:.7}
+    .nav-btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+    .nav-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;transition:opacity .15s}
+    .nav-btn:active{opacity:.75}
+    .nav-btn.gmaps{background:#e8f0fe;color:#1967d2}
+    .nav-btn.waze{background:#eafbee;color:#1a7a42}
     .thanks{text-align:center;padding:14px 6px;animation:pop .45s cubic-bezier(.2,.9,.3,1.2)}
     .thanks .emoji{font-size:58px;margin-bottom:8px}
     .thanks h2{font-size:23px;font-weight:900;margin:0 0 10px}
@@ -104,7 +116,7 @@
     <!-- INFO -->
     <div class="sec-title"><span class="bar"></span> טוב לדעת</div>
     <div class="info">
-      <div class="row"><span class="k">🕒 זמינות</span><span>המכונה פתוחה 24/7, בלובי הבניין</span></div>
+      <div class="row"><span class="k">🕒 זמינות</span><span id="infoMachineName">המכונה פתוחה 24/7</span></div>
       <div class="row"><span class="k">💳 תשלום</span><span>מזומן, אשראי ותשלום דיגיטלי</span></div>
       <div class="row"><span class="k">📦 מבחר</span><span>חטיפים, משקאות ומוצרים טריים</span></div>
     </div>
@@ -132,6 +144,13 @@
             <input type="email" id="email" placeholder="name@example.com" autocomplete="email" />
             <div class="err-msg" id="err_email">כתובת אימייל לא תקינה</div>
           </div>
+          <div class="field">
+            <label for="machine_select">📍 המכונה שלי <span class="req">*</span></label>
+            <select id="machine_select" class="field-select">
+              <option value="">⏳ טוען מיקומים...</option>
+            </select>
+            <div class="err-msg" id="err_machine">נא לבחור את מיקום המכונה</div>
+          </div>
           <label class="consent" for="consent">
             <input type="checkbox" id="consent" required />
             <span>אני מאשר/ת קבלת עדכונים, הטבות, מבצעים ופרסומים מהשכונתית למייל ו/או לנייד בהתאם לחוק התקשורת.</span>
@@ -153,9 +172,37 @@
 
   <script>
     const params = new URLSearchParams(location.search);
-    const machineId = params.get('machine') || 'unknown';
-    const tag = document.getElementById('machineTag');
-    if (machineId !== 'unknown') tag.textContent = 'מכונה: ' + machineId;
+    const urlMachine = params.get('machine') || '';
+
+    // Load machines into dropdown
+    const machineSelect = document.getElementById('machine_select');
+    (async () => {
+      try {
+        const res = await fetch('/api/machines');
+        const { machines = [] } = await res.json();
+        if (!machines.length) {
+          machineSelect.innerHTML = '<option value="">אין מכונות זמינות כרגע</option>';
+          return;
+        }
+        machineSelect.innerHTML =
+          '<option value="">— בחרו את המכונה שלכם —</option>' +
+          machines.map(m => `<option value="${esc(m.id)}">${esc(m.name)}${m.location ? ' · ' + esc(m.location) : ''}</option>`).join('');
+        // Pre-select if URL param matches a machine id
+        if (urlMachine && machines.find(m => m.id === urlMachine)) {
+          machineSelect.value = urlMachine;
+          machineSelect.disabled = true; // already known from QR code
+          const matched = machines.find(m => m.id === urlMachine);
+          document.getElementById('machineTag').textContent = '📍 ' + matched.name;
+          document.getElementById('infoMachineName').textContent =
+            matched.name + (matched.location ? ' · ' + matched.location : '') + ' · פתוחה 24/7';
+        } else if (urlMachine) {
+          // Legacy QR code — machine_id not in DB yet, keep as hidden fallback
+          document.getElementById('machineTag').textContent = 'מכונה: ' + urlMachine;
+        }
+      } catch {
+        machineSelect.innerHTML = '<option value="">שגיאה בטעינת מיקומים</option>';
+      }
+    })();
 
     function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -163,23 +210,40 @@
     (async () => {
       const box = document.getElementById('promos');
       try {
-        const res = await fetch('/api/promotions');
+        const promoUrl = '/api/promotions' + (urlMachine ? '?machine='+encodeURIComponent(urlMachine) : '');
+        // also load machines so we can show the machine name on promo cards
+        const [res, mres] = await Promise.all([fetch(promoUrl), fetch('/api/machines')]);
         const { promotions } = await res.json();
+        const { machines = [] } = await mres.json();
+        // Store full machine objects (including lat/lng for navigation)
+        const machineMap = Object.fromEntries(machines.map(m=>[m.id, m]));
         if (!promotions || !promotions.length) {
           box.innerHTML = '<div class="empty">בקרוב מבצעים חדשים — הצטרפו למועדון כדי להיות ראשונים לדעת! 👇</div>';
           return;
         }
-        box.innerHTML = promotions.map(p => `
+        box.innerHTML = promotions.map(p => {
+          // For navigation: use the promo's specific machine, or fall back to the QR-scanned machine
+          const navMachine = machineMap[p.machine_id] || (urlMachine ? machineMap[urlMachine] : null);
+          const lat = navMachine?.lat, lng = navMachine?.lng;
+          const machineName = (machineMap[p.machine_id] || {}).name;
+          return `
           <div class="promo">
             <div class="ic">${esc(p.emoji || '🌿')}</div>
             <div class="body">
               <div class="top">
                 <h3>${esc(p.title)}</h3>
                 ${p.badge ? `<span class="badge">${esc(p.badge)}</span>` : ''}
+                ${p.machine_id && machineName ? `<span class="badge" style="background:#2c5aa0">📍 ${esc(machineName)}</span>` : ''}
               </div>
               ${p.description ? `<p>${esc(p.description)}</p>` : ''}
+              ${(lat && lng) ? `
+              <div class="nav-btns">
+                <a href="https://maps.google.com/?q=${lat},${lng}" target="_blank" rel="noopener" class="nav-btn gmaps">🗺 Google Maps</a>
+                <a href="https://waze.com/ul?ll=${lat},${lng}&navigate=yes" target="_blank" rel="noopener" class="nav-btn waze">🚗 Waze</a>
+              </div>` : ''}
             </div>
-          </div>`).join('');
+          </div>`;
+        }).join('');
       } catch {
         box.innerHTML = '<div class="empty">בקרוב מבצעים חדשים 🌿</div>';
       }
@@ -202,7 +266,13 @@
       const emailOk = !email.value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value);
       setErr('err_email', !emailOk); email.classList.toggle('invalid', !emailOk); ok &&= emailOk;
       const consentOk = consent.checked; setErr('err_consent', !consentOk); ok &&= consentOk;
+      // machine validation — skip if disabled (pre-selected from URL) or if legacy URL machine
+      const selectedMachine = machineSelect.disabled ? machineSelect.value : machineSelect.value;
+      const machineOk = !!selectedMachine || !!urlMachine;
+      setErr('err_machine', !machineOk); machineSelect.classList.toggle('invalid', !machineOk); ok &&= machineOk;
       if (!ok) return;
+
+      const resolvedMachineId = selectedMachine || urlMachine || 'unknown';
 
       const btn = document.getElementById('submitBtn');
       btn.disabled = true; btn.textContent = 'שולח...';
@@ -210,7 +280,7 @@
         const res = await fetch('/api/leads', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ full_name: name.value.trim(), phone: phone.value,
-            email: email.value.trim() || null, machine_id: machineId, consent: true }),
+            email: email.value.trim() || null, machine_id: resolvedMachineId, consent: true }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'שגיאה');

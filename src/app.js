@@ -7,7 +7,7 @@ import { dirname, join, resolve, extname } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import 'dotenv/config';
 
-import { initSchema, Leads, Campaigns, Promotions } from './sheets.js';
+import { initSchema, Leads, Campaigns, Promotions, SmsLog, Machines, Products } from './sheets.js';
 import { issueSession, clearSession, checkCredentials, requireAuth } from './auth.js';
 import { runCampaign } from './services/broadcaster.js';
 
@@ -93,9 +93,18 @@ app.post('/api/leads', leadLimiter, async (req, res) => {
 
 app.get('/api/promotions', async (req, res) => {
   try {
-    res.json({ promotions: await Promotions.all({ activeOnly: true }) });
+    res.json({ promotions: await Promotions.all({ activeOnly: true, machine_id: req.query.machine || null }) });
   } catch (e) {
     res.json({ promotions: [] });
+  }
+});
+
+app.get('/api/machines', async (req, res) => {
+  try {
+    const all = await Machines.all();
+    res.json({ machines: all.filter(m => m.status === 'active').map(m => ({ id: m.id, name: m.name, location: m.location, lat: m.lat ?? null, lng: m.lng ?? null })) });
+  } catch (e) {
+    res.json({ machines: [] });
   }
 });
 
@@ -116,7 +125,10 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
 app.post('/api/admin/logout', (req, res) => { clearSession(res); res.json({ ok: true }); });
 
 app.get('/admin/login', (req, res) => res.sendFile(join(ROOT, 'public', 'login.html')));
-app.get('/admin', requireAuth, (req, res) => res.sendFile(join(ROOT, 'public', 'admin.html')));
+app.get('/admin', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(join(ROOT, 'public', 'admin.html'));
+});
 
 // =========================================================
 //  ADMIN — data API
@@ -165,10 +177,17 @@ app.get('/api/admin/leads/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(502).json({ error: 'שגיאת חיבור לגיליון', detail: e.message }); }
 });
 
+app.delete('/api/admin/leads/:id', requireAuth, async (req, res) => {
+  try {
+    await Leads.remove(req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'שגיאת מחיקה', detail: e.message }); }
+});
+
 app.patch('/api/admin/leads/:id', requireAuth, async (req, res) => {
   try {
     const allowed = {};
-    for (const k of ['status', 'tags', 'notes']) {
+    for (const k of ['status', 'tags', 'notes', 'machine_id']) {
       if (k in req.body) allowed[k] = String(req.body[k] ?? '');
     }
     if (!Object.keys(allowed).length) return res.status(400).json({ error: 'אין שדות לעדכון' });
@@ -208,9 +227,9 @@ app.get('/api/admin/promotions', requireAuth, async (req, res) => {
 
 app.post('/api/admin/promotions', requireAuth, async (req, res) => {
   try {
-    const { title, description, badge, emoji, active, sort_order } = req.body;
+    const { title, description, badge, emoji, active, sort_order, machine_id } = req.body;
     if (!title || !String(title).trim()) return res.status(400).json({ error: 'כותרת חובה' });
-    const promo = await Promotions.create({ title: String(title).trim(), description: String(description || '').trim(), badge: String(badge || '').trim(), emoji: String(emoji || '🌿').trim(), active: active === undefined ? true : !!active, sort_order: Number(sort_order) || 0 });
+    const promo = await Promotions.create({ title: String(title).trim(), description: String(description || '').trim(), badge: String(badge || '').trim(), emoji: String(emoji || '🌿').trim(), active: active === undefined ? true : !!active, sort_order: Number(sort_order) || 0, machine_id: machine_id || null });
     res.json({ ok: true, promotion: promo });
   } catch (e) { res.status(502).json({ error: 'שגיאה ביצירת מבצע', detail: e.message }); }
 });
@@ -218,7 +237,7 @@ app.post('/api/admin/promotions', requireAuth, async (req, res) => {
 app.patch('/api/admin/promotions/:id', requireAuth, async (req, res) => {
   try {
     const fields = {};
-    for (const k of ['title', 'description', 'badge', 'emoji', 'sort_order']) {
+    for (const k of ['title', 'description', 'badge', 'emoji', 'sort_order', 'machine_id']) {
       if (k in req.body) fields[k] = req.body[k];
     }
     if ('active' in req.body) fields.active = !!req.body.active;
@@ -258,6 +277,110 @@ app.post('/api/admin/campaigns', requireAuth, upload.single('media'), async (req
   } catch (e) {
     res.status(500).json({ error: 'שגיאה בשליחת הקמפיין', detail: e.message });
   }
+});
+
+// =========================================================
+//  ADMIN — SMS log
+// =========================================================
+app.get('/api/admin/sms-log', requireAuth, async (req, res) => {
+  try {
+    const { lead_id, machine_id, channel, status, search } = req.query;
+    const [logs, stats] = await Promise.all([
+      SmsLog.all({ lead_id, machine_id, channel, status, search }),
+      SmsLog.stats(),
+    ]);
+    res.json({ logs, stats });
+  } catch (e) { res.status(502).json({ error: 'שגיאת טעינת לוג SMS', detail: e.message }); }
+});
+
+// =========================================================
+//  ADMIN — machines
+// =========================================================
+app.get('/api/admin/machines/debug', requireAuth, async (req, res) => {
+  const { createClient } = await import('@supabase/supabase-js');
+  const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  const raw = await sb.from('machines').select('*');
+  res.json({ url: process.env.SUPABASE_URL?.slice(0,40), data: raw.data, error: raw.error, count: raw.data?.length ?? null });
+});
+
+app.get('/api/admin/machines', requireAuth, async (req, res) => {
+  try { res.json({ machines: await Machines.all() }); }
+  catch (e) { res.status(502).json({ error: 'שגיאת טעינת מכונות', detail: e.message }); }
+});
+
+app.post('/api/admin/machines', requireAuth, async (req, res) => {
+  try {
+    const { name, location, status, notes, lat, lng } = req.body;
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'שם המכונה חובה' });
+    const machine = await Machines.create({
+      name: String(name).trim(),
+      location: String(location || '').trim(),
+      status: status || 'active',
+      notes: String(notes || '').trim(),
+      sort_order: Number(req.body.sort_order) || 0,
+      lat: lat != null && lat !== '' ? parseFloat(lat) : null,
+      lng: lng != null && lng !== '' ? parseFloat(lng) : null,
+    });
+    res.json({ ok: true, machine });
+  } catch (e) { res.status(500).json({ error: 'שגיאה ביצירת מכונה', detail: e.message }); }
+});
+
+app.patch('/api/admin/machines/:id', requireAuth, async (req, res) => {
+  try {
+    const fields = {};
+    for (const k of ['name', 'location', 'status', 'notes']) {
+      if (k in req.body) fields[k] = String(req.body[k] ?? '').trim();
+    }
+    if ('sort_order' in req.body) fields.sort_order = Number(req.body.sort_order) || 0;
+    if ('lat' in req.body) fields.lat = req.body.lat !== '' ? parseFloat(req.body.lat) : null;
+    if ('lng' in req.body) fields.lng = req.body.lng !== '' ? parseFloat(req.body.lng) : null;
+    const machine = await Machines.update(req.params.id, fields);
+    res.json({ ok: true, machine });
+  } catch (e) { res.status(500).json({ error: 'שגיאת עדכון מכונה', detail: e.message }); }
+});
+
+app.delete('/api/admin/machines/:id', requireAuth, async (req, res) => {
+  try { await Machines.remove(req.params.id); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: 'שגיאת מחיקת מכונה', detail: e.message }); }
+});
+
+// =========================================================
+//  ADMIN — products
+// =========================================================
+app.get('/api/admin/products', requireAuth, async (req, res) => {
+  try { res.json({ products: await Products.all({ search: req.query.search }) }); }
+  catch (e) { res.status(502).json({ error: 'שגיאת טעינת מוצרים', detail: e.message }); }
+});
+
+app.post('/api/admin/products', requireAuth, async (req, res) => {
+  try {
+    const { name, category, price_before, price_after } = req.body;
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'שם המוצר חובה' });
+    const product = await Products.create({ name: String(name).trim(), category: String(category || '').trim(), price_before, price_after });
+    res.json({ ok: true, product });
+  } catch (e) { res.status(500).json({ error: 'שגיאה ביצירת מוצר', detail: e.message }); }
+});
+
+app.post('/api/admin/products/bulk', requireAuth, async (req, res) => {
+  try {
+    const { products } = req.body;
+    if (!Array.isArray(products) || !products.length) return res.status(400).json({ error: 'רשימת מוצרים ריקה' });
+    const result = await Products.bulkInsert(products);
+    res.json({ ok: true, ...result });
+  } catch (e) { res.status(500).json({ error: 'שגיאה בייבוא מוצרים', detail: e.message }); }
+});
+
+app.patch('/api/admin/products/:id', requireAuth, async (req, res) => {
+  try {
+    const { name, category, price_before, price_after } = req.body;
+    const product = await Products.update(req.params.id, { name, category, price_before, price_after });
+    res.json({ ok: true, product });
+  } catch (e) { res.status(500).json({ error: 'שגיאת עדכון מוצר', detail: e.message }); }
+});
+
+app.delete('/api/admin/products/:id', requireAuth, async (req, res) => {
+  try { await Products.remove(req.params.id); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: 'שגיאת מחיקת מוצר', detail: e.message }); }
 });
 
 // =========================================================

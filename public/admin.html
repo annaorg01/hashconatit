@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>השכונתית · CRM</title>
+  <title>השכונתית · CRM v2</title>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
     :root{--cream:#F7F3EA;--cream-2:#FBF8F1;--charcoal:#1F1E1C;--soft:#6B6760;
       --green:#5BBF3A;--green-dark:#46992C;--line:#E4DCCB;--err:#C0392B}
@@ -72,6 +75,35 @@
     .hint{font-size:12.5px;color:var(--soft);margin-top:6px}
     .legal{background:rgba(91,191,58,.1);border:1px solid rgba(91,191,58,.3);border-radius:12px;
       padding:11px 14px;font-size:13px;color:var(--green-dark);font-weight:600;margin-bottom:16px}
+    /* machines */
+    .machine-card{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;
+      display:flex;align-items:center;gap:14px;margin-bottom:10px}
+    .machine-card .mc-icon{font-size:28px;flex-shrink:0}
+    .machine-card .mc-info{flex:1;min-width:0}
+    .machine-card .mc-info b{font-size:15px;display:block}
+    .machine-card .mc-info span{font-size:13px;color:var(--soft)}
+    .machine-card .mc-leads{font-size:13px;color:var(--soft);text-align:center;min-width:70px}
+    .machine-card .mc-leads strong{display:block;font-size:20px;font-weight:900;color:var(--charcoal)}
+    .st-active{color:#2a7a10} .st-maintenance{color:#9a6b16} .st-offline{color:var(--err)}
+    /* map picker */
+    #machineMap{height:260px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;display:none;margin-top:10px}
+    .map-coord{font-size:12px;color:var(--soft);margin-right:8px}
+    /* sms log */
+    .sms-body-cell{max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+    .ch-sms{background:#dff0ff;color:#1560a0;border-radius:8px;padding:1px 8px;font-size:12px;font-weight:700}
+    .ch-whatsapp{background:#d4f5e1;color:#1a7a42;border-radius:8px;padding:1px 8px;font-size:12px;font-weight:700}
+    .ch-email{background:#f0e6ff;color:#6b1a9a;border-radius:8px;padding:1px 8px;font-size:12px;font-weight:700}
+    /* mundial templates */
+    .templates-box{background:linear-gradient(135deg,#1a3a1a 0%,#0d2d0d 100%);border:2px solid #5BBF3A;
+      border-radius:16px;padding:16px;margin-bottom:18px}
+    .templates-box h3{margin:0 0 12px;color:#fff;font-size:15px;display:flex;align-items:center;gap:8px}
+    .tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+    .tpl-card{background:rgba(255,255,255,.07);border:1.5px solid rgba(91,191,58,.35);border-radius:12px;
+      padding:12px;cursor:pointer;transition:.18s;text-align:right}
+    .tpl-card:hover{background:rgba(91,191,58,.18);border-color:#5BBF3A;transform:translateY(-2px)}
+    .tpl-card .tpl-title{font-weight:800;font-size:13px;color:#fff;margin-bottom:5px}
+    .tpl-card .tpl-preview{font-size:12px;color:rgba(255,255,255,.65);line-height:1.45;
+      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
     /* promotions */
     .promo-list{display:flex;flex-direction:column;gap:10px}
     .promo-item{display:flex;gap:12px;align-items:center;background:#fff;border:1.5px solid var(--line);
@@ -114,6 +146,9 @@
       <button class="tab" data-tab="promos">🏷️ מבצעים</button>
       <button class="tab" data-tab="campaign">📣 שליחת קמפיין</button>
       <button class="tab" data-tab="history">🕓 היסטוריה</button>
+      <button class="tab" data-tab="smslog">📱 לוג הודעות</button>
+      <button class="tab" data-tab="machines">🏪 מכונות</button>
+      <button class="tab" data-tab="products">🛒 מוצרים</button>
     </div>
 
     <!-- DASHBOARD -->
@@ -152,6 +187,20 @@
     <section id="tab-promos" class="panel hidden">
       <h2>ניהול מבצעים</h2>
       <div class="hint" style="margin-bottom:14px">המבצעים הפעילים מוצגים אוטומטית במסך הלקוח (דף ה-QR).</div>
+
+      <!-- Product picker for promo form -->
+      <div style="margin-bottom:14px">
+        <button type="button" id="openProductPicker" class="btn ghost sm">🛒 בחר מוצר מהרשימה — ימלא אוטומטית את שדות המבצע</button>
+        <div id="productPickerPanel" class="hidden" style="margin-top:10px;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px">
+          <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+            <input id="pickerSearch" placeholder="חיפוש מוצר..." style="flex:1" />
+            <button type="button" id="closeProductPicker" class="btn ghost sm">✕ סגור</button>
+          </div>
+          <div id="pickerGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;max-height:290px;overflow-y:auto"></div>
+          <div id="pickerEmpty" class="hidden" style="text-align:center;color:var(--soft);padding:16px;font-size:14px">לא נמצאו מוצרים תואמים</div>
+        </div>
+      </div>
+
       <form id="promoForm" class="row" style="align-items:flex-end">
         <div class="col" style="min-width:120px;flex:0 0 90px">
           <label style="font-weight:800;font-size:13px">אייקון</label>
@@ -165,9 +214,15 @@
           <label style="font-weight:800;font-size:13px">תווית</label>
           <input id="pBadge" style="width:100%" placeholder="חדש / מוגבל" />
         </div>
-        <div class="col" style="flex:1 1 100%">
+        <div class="col" style="flex:1 1 60%">
           <label style="font-weight:800;font-size:13px">תיאור</label>
           <input id="pDesc" style="width:100%" placeholder="בכל קנייה מעל 10 ₪" />
+        </div>
+        <div class="col" style="flex:1 1 200px">
+          <label style="font-weight:800;font-size:13px">📍 מכונה</label>
+          <select id="pMachine" style="width:100%">
+            <option value="">כל המכונות</option>
+          </select>
         </div>
         <div class="col" style="flex:0 0 auto">
           <button type="submit" class="btn" id="pSubmit">➕ הוספת מבצע</button>
@@ -195,6 +250,10 @@
             <div id="singleOpts" style="margin-top:10px" class="hidden"><input id="audSearch" style="width:100%" placeholder="טלפון או שם" /></div>
           </fieldset></div>
         </div>
+        <div class="templates-box">
+          <h3>⚽ תבניות מונדיאל 2026 — לחץ/י לטעינה מיידית</h3>
+          <div class="tpl-grid" id="tplGrid"></div>
+        </div>
         <label style="font-weight:800;font-size:14px;display:block;margin-bottom:7px">תוכן ההודעה</label>
         <textarea id="body" placeholder="היי {{full_name}}, יש לנו הטבה בשבילך בשכונתית! 🌿"></textarea>
         <div class="hint">תגיות דינמיות: <code>{{full_name}}</code> · <code>{{machine_id}}</code> · <code>{{phone}}</code></div>
@@ -211,6 +270,138 @@
         </div>
         <button type="submit" class="btn" style="margin-top:18px;font-size:16px;padding:13px 28px" id="sendBtn">🚀 שליחת קמפיין</button>
       </form>
+    </section>
+
+    <!-- SMS LOG -->
+    <section id="tab-smslog" class="panel hidden">
+      <h2>לוג הודעות נשלחות</h2>
+      <div id="smsStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px"></div>
+      <div class="controls">
+        <input id="smsSearch" placeholder="חיפוש שם / טלפון / תוכן" style="flex:1;min-width:180px" />
+        <select id="smsMachineFilter"><option value="">כל המכונות</option></select>
+        <select id="smsChannelFilter">
+          <option value="">כל הערוצים</option>
+          <option value="sms">SMS</option>
+          <option value="whatsapp">וואטסאפ</option>
+          <option value="email">אימייל</option>
+        </select>
+        <select id="smsStatusFilter">
+          <option value="">כל הסטטוסים</option>
+          <option value="sent">נשלח</option>
+          <option value="failed">נכשל</option>
+        </select>
+        <button class="btn ghost" id="smsRefreshBtn">רענון</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>תאריך</th><th>שם</th><th>טלפון</th><th>מכונה</th><th>ערוץ</th><th>סטטוס</th><th>תוכן ההודעה</th></tr></thead>
+          <tbody id="smsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MACHINES -->
+    <section id="tab-machines" class="panel hidden">
+      <h2>ניהול מכונות</h2>
+      <form id="machineForm" class="row" style="align-items:flex-end;margin-bottom:18px">
+        <div class="col">
+          <label style="font-weight:800;font-size:13px">שם המכונה *</label>
+          <input id="mName" style="width:100%" placeholder='מכונה א — כניסה ראשית' />
+        </div>
+        <div class="col">
+          <label style="font-weight:800;font-size:13px">מיקום</label>
+          <input id="mLocation" style="width:100%" placeholder='רחוב הרצל 12, תל אביב' />
+        </div>
+        <div class="col" style="flex:0 0 150px">
+          <label style="font-weight:800;font-size:13px">סטטוס</label>
+          <select id="mStatus" style="width:100%">
+            <option value="active">פעילה ✅</option>
+            <option value="maintenance">תחזוקה 🔧</option>
+            <option value="offline">לא פעילה ❌</option>
+          </select>
+        </div>
+        <div class="col" style="flex:0 0 100px">
+          <label style="font-weight:800;font-size:13px">סדר תצוגה</label>
+          <input id="mOrder" type="number" min="0" style="width:100%" placeholder="0" />
+        </div>
+        <div class="col" style="flex:1 1 100%">
+          <label style="font-weight:800;font-size:13px">הערות</label>
+          <input id="mNotes" style="width:100%" placeholder='קומה 2, ליד המעלית' />
+        </div>
+        <div class="col" style="flex:1 1 100%">
+          <label style="font-weight:800;font-size:13px">
+            מיקום ניווט (GPS)
+            <span class="map-coord" id="mCoordLabel"></span>
+          </label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="button" id="geocodeBtn" class="btn ghost sm">🗺 חפש במפה לפי כתובת</button>
+            <button type="button" id="clearCoordsBtn" class="btn danger sm hidden">✕ נקה מיקום</button>
+          </div>
+          <div id="machineMap"></div>
+          <input type="hidden" id="mLat" />
+          <input type="hidden" id="mLng" />
+          <p class="hint">לאחר סימון מיקום, לקוחות יוכלו לנווט למכונה מתוך המבצעים בעמוד הנחיתה.</p>
+        </div>
+        <div class="col" style="flex:0 0 auto;display:flex;gap:8px">
+          <button type="submit" class="btn" id="mSubmit">➕ הוספת מכונה</button>
+          <button type="button" class="btn ghost hidden" id="mCancel">ביטול</button>
+        </div>
+      </form>
+      <div id="machineList"></div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section id="tab-products" class="panel hidden">
+      <h2>🛒 ניהול רשימת מוצרים</h2>
+      <form id="productForm" class="row" style="align-items:flex-end;margin-bottom:16px">
+        <div class="col" style="flex:2;min-width:200px">
+          <label style="font-weight:800;font-size:13px">שם המוצר *</label>
+          <input id="prdName" style="width:100%" placeholder="חלב תנובה 1 ליטר" />
+        </div>
+        <div class="col" style="flex:1;min-width:150px">
+          <label style="font-weight:800;font-size:13px">קטגוריה</label>
+          <input id="prdCat" style="width:100%" placeholder="חלב ומוצרי חלב" />
+        </div>
+        <div class="col" style="flex:0 0 120px">
+          <label style="font-weight:800;font-size:13px">מחיר רגיל ₪</label>
+          <input id="prdBefore" type="number" step="0.01" min="0" style="width:100%" placeholder="11.90" />
+        </div>
+        <div class="col" style="flex:0 0 120px">
+          <label style="font-weight:800;font-size:13px">מחיר מבצע ₪</label>
+          <input id="prdAfter" type="number" step="0.01" min="0" style="width:100%" placeholder="7.90" />
+        </div>
+        <div class="col" style="flex:0 0 auto;display:flex;gap:8px">
+          <button type="submit" class="btn" id="prdSubmit">➕ הוספת מוצר</button>
+          <button type="button" class="btn ghost hidden" id="prdCancel">ביטול</button>
+        </div>
+      </form>
+
+      <!-- Excel import -->
+      <div style="background:linear-gradient(135deg,#f2faf0,#e8f5e2);border:2px dashed #5BBF3A;border-radius:14px;padding:16px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+          <span style="font-weight:800;font-size:15px">📥 ייבוא מקובץ Excel</span>
+          <label class="btn ghost sm" style="cursor:pointer;border-color:#5BBF3A;color:#2a7a10">
+            📎 בחר קובץ (.xlsx / .csv)
+            <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none" />
+          </label>
+          <button id="excelImportBtn" class="btn hidden" style="background:#2a7a10;color:#fff;border:none;padding:7px 16px;border-radius:10px;font-weight:700;cursor:pointer">✅ ייבא מוצרים</button>
+          <button id="excelClearBtn" class="btn ghost sm hidden">✕ נקה</button>
+        </div>
+        <div id="excelPreview"></div>
+        <div class="hint" style="margin-top:4px">הקובץ צריך לכלול כותרות: <b>שם המוצר</b> · <b>קטגוריה</b> · <b>מחיר רגיל</b> · <b>מחיר מבצע</b></div>
+      </div>
+
+      <div class="controls" style="margin-bottom:14px">
+        <input id="prdSearch" placeholder="🔍 חיפוש מוצר או קטגוריה..." style="flex:1;max-width:360px" oninput="filterProducts()" />
+        <button id="prdSeedBtn" class="btn ghost sm">⬇️ טען 120 מוצרים ראשוניים</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>#</th><th>שם המוצר</th><th>קטגוריה</th><th style="text-align:center">מחיר רגיל</th><th style="text-align:center">מחיר מבצע</th><th style="text-align:center">הנחה %</th><th></th></tr></thead>
+          <tbody id="productBody"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="prdCount" style="margin-top:10px"></div>
     </section>
 
     <!-- HISTORY -->
@@ -234,11 +425,16 @@
       <select id="cardStatus" style="width:100%">
         <option>חדש</option><option>פעיל</option><option>VIP</option><option>לא פעיל</option>
       </select>
+      <label>📍 מכונות משויכות</label>
+      <div id="cardMachines" style="display:flex;flex-direction:column;gap:6px;background:#fff;border:1.5px solid var(--line);border-radius:11px;padding:10px 12px;max-height:160px;overflow-y:auto"></div>
       <label>תגיות (מופרדות בפסיקים)</label>
       <input id="cardTags" style="width:100%" placeholder="אוהב קפה, מבניין א" />
       <label>הערות</label>
       <textarea id="cardNotes" style="min-height:80px"></textarea>
-      <button class="btn" id="cardSave" style="margin-top:14px;width:100%">💾 שמירה</button>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn" id="cardSave" style="flex:1">💾 שמירה</button>
+        <button class="btn danger" id="cardDelete" style="flex:0 0 auto">🗑 מחיקת לקוח</button>
+      </div>
       <div class="hist">
         <b style="font-size:14px">היסטוריית הודעות שנשלחו</b>
         <div id="cardHist" style="margin-top:10px"></div>
@@ -258,12 +454,15 @@
     // ---- Tabs ----
     document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
-      ['dash','leads','promos','campaign','history'].forEach(id => $('#tab-'+id).classList.toggle('hidden', id!==t.dataset.tab));
-      if (t.dataset.tab==='dash') loadDashboard();
-      if (t.dataset.tab==='leads') { loadMachines(); loadLeads(); }
-      if (t.dataset.tab==='promos') loadPromos();
-      if (t.dataset.tab==='history') loadCampaigns();
+      ['dash','leads','promos','campaign','history','smslog','machines'].forEach(id => $('#tab-'+id).classList.toggle('hidden', id!==t.dataset.tab));
+      if (t.dataset.tab==='dash')     loadDashboard();
+      if (t.dataset.tab==='leads')    { loadMachines(); loadLeads(); }
+      if (t.dataset.tab==='promos')   loadPromos();
+      if (t.dataset.tab==='history')  loadCampaigns();
       if (t.dataset.tab==='campaign') loadMachines();
+      if (t.dataset.tab==='smslog')   { loadSmsFilters(); loadSmsLog(); }
+      if (t.dataset.tab==='machines') loadMachineList();
+      if (t.dataset.tab==='products') loadProducts();
     }));
 
     $('#logoutBtn').addEventListener('click', async () => { await fetch('/api/admin/logout',{method:'POST'}); location.href='/admin/login'; });
@@ -326,16 +525,34 @@
     });
 
     // ---- Customer card ----
+    let _allMachines = [];
     async function openCard(id){
-      const r = await fetch('/api/admin/leads/'+encodeURIComponent(id));
+      const [r, mr] = await Promise.all([
+        fetch('/api/admin/leads/'+encodeURIComponent(id)),
+        _allMachines.length ? Promise.resolve(null) : fetch('/api/admin/machines'),
+      ]);
       if(!r.ok) return toast('שגיאה בטעינת הכרטיס');
+      if(mr) { const mj = await mr.json(); _allMachines = mj.machines||[]; }
       const { lead, history } = await r.json();
       $('#cardId').value = lead.id;
       $('#cardName').textContent = lead.full_name;
-      $('#cardMeta').innerHTML = `📞 ${esc(lead.phone)} ${lead.email?'· ✉️ '+esc(lead.email):''} · 🏢 ${esc(lead.machine_id)} · נרשם ${fmt(lead.created_at)}`;
+      $('#cardMeta').innerHTML = `📞 ${esc(lead.phone)} ${lead.email?'· ✉️ '+esc(lead.email):''} · נרשם ${fmt(lead.created_at)}`;
       $('#cardStatus').value = lead.status||'חדש';
       $('#cardTags').value = lead.tags||'';
       $('#cardNotes').value = lead.notes||'';
+
+      // Machine multi-picker
+      const selected = (lead.machine_id||'').split(',').map(s=>s.trim()).filter(Boolean);
+      if(_allMachines.length) {
+        $('#cardMachines').innerHTML = _allMachines.map(m=>`
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600">
+            <input type="checkbox" data-mid="${esc(m.id)}" ${selected.includes(m.id)?'checked':''} style="width:17px;height:17px;accent-color:var(--green);flex-shrink:0" />
+            <span>${esc(m.name)}${m.location?'<span style="color:var(--soft);font-weight:400"> · '+esc(m.location)+'</span>':''}</span>
+          </label>`).join('');
+      } else {
+        $('#cardMachines').innerHTML = `<span style="color:var(--soft);font-size:13px">אין מכונות מוגדרות במערכת</span>`;
+      }
+
       $('#cardHist').innerHTML = (history&&history.length)
         ? history.map(h=>`<div class="h"><div class="when">${fmt(h.created_at)} · ${esc(JSON.parse(h.channels||'[]').join(', '))}</div>${esc(h.body)}</div>`).join('')
         : '<div class="empty" style="padding:10px">עדיין לא נשלחו הודעות ללקוח זה</div>';
@@ -345,44 +562,92 @@
     $('#overlay').addEventListener('click', e=>{ if(e.target===$('#overlay')) $('#overlay').classList.remove('show'); });
     $('#cardSave').addEventListener('click', async ()=>{
       const id=$('#cardId').value;
+      const checkedMachines = [...$('#cardMachines').querySelectorAll('input[type=checkbox]:checked')]
+        .map(cb=>cb.dataset.mid).filter(Boolean).join(',');
       const r = await fetch('/api/admin/leads/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({status:$('#cardStatus').value,tags:$('#cardTags').value,notes:$('#cardNotes').value})});
+        body:JSON.stringify({status:$('#cardStatus').value,tags:$('#cardTags').value,notes:$('#cardNotes').value,machine_id:checkedMachines||'unknown'})});
       if(r.ok){ toast('✅ נשמר'); $('#overlay').classList.remove('show'); loadLeads(); }
       else toast('⚠ שגיאה בשמירה');
     });
 
+    $('#cardDelete').addEventListener('click', async ()=>{
+      const id=$('#cardId').value;
+      const name=$('#cardName').textContent;
+      if(!confirm(`למחוק את הלקוח "${name}"?\nפעולה זו אינה ניתנת לביטול.`)) return;
+      const r = await fetch('/api/admin/leads/'+encodeURIComponent(id),{method:'DELETE'});
+      if(r.ok){ toast('🗑 הלקוח נמחק'); $('#overlay').classList.remove('show'); loadLeads(); }
+      else toast('⚠ שגיאה במחיקה');
+    });
+
     // ================= PROMOTIONS =================
     let editingPromo = null;
+    let _promoMachines = [];
     async function loadPromos(){
-      const r = await fetch('/api/admin/promotions'); const { promotions } = await r.json();
+      const [r, mr] = await Promise.all([
+        fetch('/api/admin/promotions'),
+        _promoMachines.length ? Promise.resolve(null) : fetch('/api/admin/machines'),
+      ]);
+      const { promotions } = await r.json();
+      if (mr) {
+        const mj = await mr.json();
+        _promoMachines = mj.machines || [];
+        $('#pMachine').innerHTML = '<option value="">כל המכונות</option>'
+          + _promoMachines.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+      }
+      const machineMap = Object.fromEntries(_promoMachines.map(m=>[m.id, m.name]));
       $('#promoList').innerHTML = (promotions||[]).map(p=>`
         <div class="promo-item ${p.active?'':'off'}">
           <div class="ic">${esc(p.emoji||'🌿')}</div>
-          <div class="info"><b>${esc(p.title)}</b> ${p.badge?`<span class="pill green">${esc(p.badge)}</span>`:''}<small>${esc(p.description||'')}</small></div>
+          <div class="info">
+            <b>${esc(p.title)}</b>
+            ${p.badge?`<span class="pill green">${esc(p.badge)}</span>`:''}
+            ${p.machine_id?`<span class="pill" style="background:#e8eef7;color:#2c5aa0">📍 ${esc(machineMap[p.machine_id]||p.machine_id)}</span>`:'<span class="pill" style="background:#f0f0f0;color:#777">כל המכונות</span>'}
+            <small>${esc(p.description||'')}</small>
+          </div>
           <button class="btn ghost sm" data-act="toggle" data-id="${esc(p.id)}">${p.active?'הסתר':'הצג'}</button>
           <button class="btn ghost sm" data-act="edit" data-id="${esc(p.id)}">עריכה</button>
           <button class="btn danger sm" data-act="del" data-id="${esc(p.id)}">מחיקה</button>
         </div>`).join('') || '<div class="empty">אין מבצעים עדיין — הוסיפו אחד למעלה 👆</div>';
-      // attach
       $('#promoList').querySelectorAll('button[data-act]').forEach(b=>b.addEventListener('click', ()=>promoAction(b.dataset.act,b.dataset.id,promotions)));
     }
     async function promoAction(act,id,list){
-      const p = list.find(x=>String(x.id)===String(id));
-      if(act==='toggle'){ await fetch('/api/admin/promotions/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!p.active})}); loadPromos(); }
-      if(act==='del'){ if(confirm('למחוק את המבצע?')){ await fetch('/api/admin/promotions/'+id,{method:'DELETE'}); loadPromos(); } }
-      if(act==='edit'){ editingPromo=id; $('#pEmoji').value=p.emoji||'🌿'; $('#pTitle').value=p.title; $('#pBadge').value=p.badge||''; $('#pDesc').value=p.description||'';
-        $('#pSubmit').textContent='💾 עדכון מבצע'; $('#pCancel').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+      try {
+        const p = list.find(x=>String(x.id)===String(id));
+        if (!p) { toast('⚠ מבצע לא נמצא (id: '+id+')'); return; }
+        if(act==='toggle'){
+          const r=await fetch('/api/admin/promotions/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!p.active})});
+          if(!r.ok){ const d=await r.json().catch(()=>({})); toast('⚠ '+(d.detail||d.error||'שגיאה')); return; }
+          loadPromos();
+        }
+        if(act==='del'){ if(confirm('למחוק את המבצע?')){ await fetch('/api/admin/promotions/'+id,{method:'DELETE'}); loadPromos(); } }
+        if(act==='edit'){
+          editingPromo=id;
+          $('#pEmoji').value=p.emoji||'🌿';
+          $('#pTitle').value=p.title||'';
+          $('#pBadge').value=p.badge||'';
+          $('#pDesc').value=p.description||'';
+          $('#pMachine').value=p.machine_id||'';
+          $('#pSubmit').textContent='💾 עדכון מבצע';
+          $('#pCancel').classList.remove('hidden');
+          window.scrollTo({top:0,behavior:'smooth'});
+          toast('✏️ עורך: '+p.title.slice(0,30));
+        }
+      } catch(err){ toast('⚠ שגיאה: '+err.message); }
     }
     $('#pCancel').addEventListener('click', resetPromoForm);
-    function resetPromoForm(){ editingPromo=null; $('#promoForm').reset(); $('#pEmoji').value='🌿'; $('#pSubmit').textContent='➕ הוספת מבצע'; $('#pCancel').classList.add('hidden'); }
+    function resetPromoForm(){ editingPromo=null; $('#promoForm').reset(); $('#pEmoji').value='🌿'; $('#pMachine').value=''; $('#pSubmit').textContent='➕ הוספת מבצע'; $('#pCancel').classList.add('hidden'); }
     $('#promoForm').addEventListener('submit', async e=>{
       e.preventDefault();
       if(!$('#pTitle').value.trim()) return toast('כותרת חובה');
-      const payload={emoji:$('#pEmoji').value||'🌿',title:$('#pTitle').value.trim(),badge:$('#pBadge').value.trim(),description:$('#pDesc').value.trim()};
-      let r;
-      if(editingPromo) r=await fetch('/api/admin/promotions/'+editingPromo,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      else r=await fetch('/api/admin/promotions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,active:true})});
-      if(r.ok){ toast(editingPromo?'✅ עודכן':'✅ נוסף'); resetPromoForm(); loadPromos(); } else toast('⚠ שגיאה');
+      const payload={emoji:$('#pEmoji').value||'🌿',title:$('#pTitle').value.trim(),badge:$('#pBadge').value.trim(),description:$('#pDesc').value.trim(),machine_id:$('#pMachine').value||null};
+      const url = editingPromo ? '/api/admin/promotions/'+editingPromo : '/api/admin/promotions';
+      const method = editingPromo ? 'PATCH' : 'POST';
+      toast('🔄 '+(editingPromo?'מעדכן מבצע...':'שומר מבצע...'));
+      try {
+        const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(editingPromo?payload:{...payload,active:true})});
+        if(r.ok){ toast(editingPromo?'✅ עודכן':'✅ נוסף'); resetPromoForm(); loadPromos(); }
+        else { const d=await r.json().catch(()=>({})); toast('⚠ '+(d.detail||d.error||'שגיאה בשמירת המבצע')); }
+      } catch(err){ toast('⚠ שגיאת רשת: '+err.message); }
     });
 
     // ================= CAMPAIGN =================
@@ -424,6 +689,581 @@
         <td>${c.recipients}</td><td>${c.sent_count}</td><td>${sh[c.status]||c.status}</td><td>${fmt(c.created_at)}</td></tr>`).join('')
         || '<tr><td colspan="6" class="empty">אין קמפיינים עדיין</td></tr>';
     }
+
+    // ================= SMS LOG =================
+    const CH_LABEL = { sms:'SMS', whatsapp:'וואטסאפ', email:'אימייל' };
+    const CH_CLS   = { sms:'ch-sms', whatsapp:'ch-whatsapp', email:'ch-email' };
+
+    async function loadSmsFilters() {
+      const r = await fetch('/api/admin/stats'); if(r.status===401) return location.href='/admin/login';
+      const { machines } = await r.json();
+      $('#smsMachineFilter').innerHTML = '<option value="">כל המכונות</option>'
+        + machines.map(m=>`<option value="${esc(m.machine_id)}">${esc(m.machine_id)} (${m.count})</option>`).join('');
+    }
+
+    async function loadSmsLog() {
+      const q = new URLSearchParams();
+      if ($('#smsSearch').value)        q.set('search', $('#smsSearch').value);
+      if ($('#smsMachineFilter').value) q.set('machine_id', $('#smsMachineFilter').value);
+      if ($('#smsChannelFilter').value) q.set('channel', $('#smsChannelFilter').value);
+      if ($('#smsStatusFilter').value)  q.set('status', $('#smsStatusFilter').value);
+      const r = await fetch('/api/admin/sms-log?'+q);
+      if (r.status===401) return location.href='/admin/login';
+      const { logs=[], stats={} } = await r.json();
+
+      $('#smsStats').innerHTML = `
+        <div class="stat"><div class="n">${stats.total||0}</div><div class="l">סה"כ הודעות</div></div>
+        <div class="stat"><div class="n" style="color:var(--green)">${stats.sent||0}</div><div class="l">נשלחו</div></div>
+        <div class="stat"><div class="n" style="color:var(--err)">${stats.failed||0}</div><div class="l">נכשלו</div></div>
+        ${(stats.by_channel||[]).map(c=>`<div class="stat"><div class="n">${c.count}</div><div class="l">${CH_LABEL[c.channel]||c.channel}</div></div>`).join('')}`;
+
+      $('#smsBody').innerHTML = (logs||[]).map(l=>`
+        <tr>
+          <td style="white-space:nowrap;font-size:13px">${fmt(l.sent_at)}</td>
+          <td><b>${esc(l.full_name)}</b></td>
+          <td>${esc(l.phone)}</td>
+          <td>${esc(l.machine_id||'—')}</td>
+          <td><span class="${CH_CLS[l.channel]||''}">${CH_LABEL[l.channel]||esc(l.channel)}</span></td>
+          <td>${l.status==='sent'?'<span class="pill green">נשלח</span>':'<span class="pill no">נכשל</span>'}</td>
+          <td class="sms-body-cell" title="${esc(l.message_body)}">${esc(l.message_body)}</td>
+        </tr>`).join('') || '<tr><td colspan="7" class="empty">אין הודעות עדיין</td></tr>';
+    }
+
+    $('#smsRefreshBtn').addEventListener('click', loadSmsLog);
+    $('#smsSearch').addEventListener('input', ()=>{ clearTimeout(window._st); window._st=setTimeout(loadSmsLog,350); });
+    $('#smsMachineFilter').addEventListener('change', loadSmsLog);
+    $('#smsChannelFilter').addEventListener('change', loadSmsLog);
+    $('#smsStatusFilter').addEventListener('change', loadSmsLog);
+
+    // ================= MACHINES =================
+    const M_STATUS = { active:'פעילה ✅', maintenance:'תחזוקה 🔧', offline:'לא פעילה ❌' };
+    const M_ST_CLS = { active:'st-active', maintenance:'st-maintenance', offline:'st-offline' };
+    const M_ICON   = { active:'🏪', maintenance:'🔧', offline:'⛔' };
+    let editingMachine = null;
+    let _machinesCache = [];
+    let _leadsCache    = [];
+
+    async function loadMachineList() {
+      const [mr, lr] = await Promise.all([
+        fetch('/api/admin/machines'),
+        fetch('/api/admin/stats'),
+      ]);
+      if (mr.status===401||lr.status===401) return location.href='/admin/login';
+      if (!mr.ok) { const d = await mr.json().catch(()=>({})); toast('⚠ שגיאת טעינת מכונות: ' + (d.detail||d.error||mr.status)); return; }
+      const { machines=[] } = await mr.json();
+      const { machines: leadMachines=[] } = await lr.json();
+      _machinesCache = machines;
+
+      const leadCount = {};
+      leadMachines.forEach(m => leadCount[m.machine_id] = m.count);
+
+      $('#machineList').innerHTML = machines.length ? machines.map(m=>`
+        <div class="machine-card">
+          <div class="mc-icon">${M_ICON[m.status]||'🏪'}</div>
+          <div class="mc-info">
+            <b>${esc(m.name)}</b>
+            <span class="${M_ST_CLS[m.status]||''}">${M_STATUS[m.status]||esc(m.status)}</span>
+            ${m.location?`<span> · 📍 ${esc(m.location)}</span>`:''}
+            ${m.notes?`<span> · ${esc(m.notes)}</span>`:''}
+            ${(m.lat&&m.lng)?`<span style="color:#1967d2;font-size:12px"> · GPS ✅</span>`:'<span style="color:#aaa;font-size:12px"> · אין GPS</span>'}
+          </div>
+          <div class="mc-leads"><strong>${leadCount[m.id]||0}</strong>לקוחות</div>
+          ${(m.lat&&m.lng)?`
+          <div style="display:flex;gap:4px">
+            <a href="https://maps.google.com/?q=${m.lat},${m.lng}" target="_blank" class="btn ghost sm" style="text-decoration:none" title="פתח ב-Google Maps">🗺</a>
+            <a href="https://waze.com/ul?ll=${m.lat},${m.lng}&navigate=yes" target="_blank" class="btn ghost sm" style="text-decoration:none" title="נווט ב-Waze">🚗</a>
+          </div>`:''}
+          <div style="display:flex;flex-direction:column;gap:3px;margin-left:4px">
+            <button class="btn ghost sm" data-mact="up"   data-mid="${esc(m.id)}" title="הזז למעלה" style="padding:3px 8px;font-size:16px;line-height:1">↑</button>
+            <button class="btn ghost sm" data-mact="down" data-mid="${esc(m.id)}" title="הזז למטה"  style="padding:3px 8px;font-size:16px;line-height:1">↓</button>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn ghost sm" data-mact="edit" data-mid="${esc(m.id)}">עריכה</button>
+            <button class="btn danger sm" data-mact="del" data-mid="${esc(m.id)}">מחיקה</button>
+          </div>
+        </div>`).join('') : '<div class="empty">אין מכונות — הוסיפו מכונה למעלה 👆</div>';
+
+      $('#machineList').querySelectorAll('button[data-mact]').forEach(b=>b.addEventListener('click',()=>machineAction(b.dataset.mact, b.dataset.mid)));
+    }
+
+    async function machineAction(act, id) {
+      if (act==='del') {
+        if (!confirm('למחוק את המכונה?')) return;
+        await fetch('/api/admin/machines/'+encodeURIComponent(id), { method:'DELETE' });
+        toast('🗑 מכונה נמחקה'); loadMachineList(); return;
+      }
+      if (act==='edit') {
+        const m = _machinesCache.find(x=>x.id===id); if(!m) return;
+        editingMachine=id; $('#mName').value=m.name; $('#mLocation').value=m.location||'';
+        $('#mStatus').value=m.status||'active'; $('#mNotes').value=m.notes||'';
+        $('#mOrder').value=m.sort_order ?? 0;
+        // Restore GPS coords
+        if (m.lat && m.lng) {
+          $('#mLat').value=m.lat; $('#mLng').value=m.lng;
+          document.getElementById('mCoordLabel').textContent=`(${Number(m.lat).toFixed(5)}, ${Number(m.lng).toFixed(5)})`;
+          document.getElementById('clearCoordsBtn').classList.remove('hidden');
+          initMachineMap(); setTimeout(()=>setMapPin(m.lat, m.lng), 300);
+        } else {
+          $('#mLat').value=''; $('#mLng').value='';
+          document.getElementById('mCoordLabel').textContent='';
+          document.getElementById('clearCoordsBtn').classList.add('hidden');
+        }
+        $('#mSubmit').textContent='💾 עדכון מכונה'; $('#mCancel').classList.remove('hidden');
+        window.scrollTo({top:0,behavior:'smooth'}); return;
+      }
+      if (act==='up' || act==='down') {
+        const idx = _machinesCache.findIndex(x=>x.id===id);
+        const swapIdx = act==='up' ? idx-1 : idx+1;
+        if (swapIdx < 0 || swapIdx >= _machinesCache.length) return;
+        const a = _machinesCache[idx], b = _machinesCache[swapIdx];
+        const orderA = a.sort_order ?? idx, orderB = b.sort_order ?? swapIdx;
+        await Promise.all([
+          fetch('/api/admin/machines/'+encodeURIComponent(a.id), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ sort_order: orderB }) }),
+          fetch('/api/admin/machines/'+encodeURIComponent(b.id), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ sort_order: orderA }) }),
+        ]);
+        loadMachineList();
+      }
+    }
+
+    $('#mCancel').addEventListener('click', resetMachineForm);
+    function resetMachineForm() {
+      editingMachine=null; $('#machineForm').reset(); $('#mStatus').value='active'; $('#mOrder').value='';
+      $('#mLat').value=''; $('#mLng').value='';
+      document.getElementById('mCoordLabel').textContent='';
+      document.getElementById('clearCoordsBtn').classList.add('hidden');
+      if (_mapMarker) { _mapMarker.remove(); _mapMarker=null; }
+      $('#mSubmit').textContent='➕ הוספת מכונה'; $('#mCancel').classList.add('hidden');
+    }
+
+    $('#machineForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!$('#mName').value.trim()) return toast('שם המכונה חובה');
+      const _lat = $('#mLat').value, _lng = $('#mLng').value;
+      const payload = { name:$('#mName').value.trim(), location:$('#mLocation').value.trim(), status:$('#mStatus').value, notes:$('#mNotes').value.trim(), sort_order: Number($('#mOrder').value)||0, lat: _lat!=='' ? parseFloat(_lat) : null, lng: _lng!=='' ? parseFloat(_lng) : null };
+      try {
+        let r;
+        if (editingMachine) r = await fetch('/api/admin/machines/'+encodeURIComponent(editingMachine), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        else                r = await fetch('/api/admin/machines', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        if (r.ok) { toast(editingMachine?'✅ מכונה עודכנה':'✅ מכונה נוספה'); resetMachineForm(); loadMachineList(); }
+        else { const d = await r.json().catch(()=>({})); toast('⚠ ' + (d.detail || d.error || 'שגיאה בשמירת המכונה')); }
+      } catch(err) { toast('⚠ שגיאת רשת: ' + err.message); }
+    });
+
+    // ================= MACHINE MAP PICKER =================
+    let _leafletMap = null, _mapMarker = null;
+
+    function initMachineMap() {
+      const el = document.getElementById('machineMap');
+      el.style.display = 'block';
+      if (_leafletMap) { setTimeout(()=>_leafletMap.invalidateSize(), 100); return; }
+      _leafletMap = L.map('machineMap').setView([32.0853, 34.7818], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap', maxZoom: 19
+      }).addTo(_leafletMap);
+      _leafletMap.on('click', e => setMapPin(e.latlng.lat, e.latlng.lng));
+      setTimeout(()=>_leafletMap.invalidateSize(), 200);
+    }
+
+    function setMapPin(lat, lng) {
+      $('#mLat').value = lat; $('#mLng').value = lng;
+      document.getElementById('mCoordLabel').textContent = `(${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`;
+      document.getElementById('clearCoordsBtn').classList.remove('hidden');
+      if (_mapMarker) _mapMarker.setLatLng([lat, lng]);
+      else _mapMarker = L.marker([lat, lng]).addTo(_leafletMap);
+      _leafletMap.setView([lat, lng], Math.max(_leafletMap.getZoom(), 16));
+    }
+
+    document.getElementById('geocodeBtn').addEventListener('click', async () => {
+      const addr = ($('#mLocation').value || '').trim();
+      if (!addr) return toast('הזינו כתובת בשדה המיקום תחילה');
+      initMachineMap();
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1`, { headers:{'Accept-Language':'he'} });
+        const [hit] = await r.json();
+        if (!hit) return toast('לא נמצאה כתובת — נסו ניסוח שונה');
+        setMapPin(parseFloat(hit.lat), parseFloat(hit.lon));
+      } catch { toast('שגיאה בחיפוש כתובת'); }
+    });
+
+    document.getElementById('clearCoordsBtn').addEventListener('click', () => {
+      $('#mLat').value=''; $('#mLng').value='';
+      document.getElementById('mCoordLabel').textContent='';
+      document.getElementById('clearCoordsBtn').classList.add('hidden');
+      if (_mapMarker) { _mapMarker.remove(); _mapMarker=null; }
+    });
+
+    // ================= MUNDIAL TEMPLATES =================
+    const MUNDIAL_TEMPLATES = [
+      { title:'⚽ 1+1 על משקאות', body:`היי {{full_name}}! 🏆 מונדיאל 2026 כבר כאן!\nחגגו איתנו בשכונתית — 1+1 על כל המשקאות בזמן המשחקים!\nמגיע לכם לצפות עם שתייה קרה ביד ⚽🥤` },
+      { title:'🏆 20% הנחה לטורניר', body:`שלום {{full_name}} 👋\nלכבוד המונדיאל אנחנו נותנים 20% הנחה על כל קנייה בשכונתית!\nהמבצע תקף לכל משך הטורניר — אל תפספסו 🌟` },
+      { title:'🎉 חבילת צפייה', body:`{{full_name}} יקר/ה,\nמוכנים למשחק? קנו 3 מוצרים בשכונתית וקבלו חטיף מתנה! 🎊\nהטבה מיוחדת לחובבי כדורגל ⚽🍿` },
+      { title:'🌟 VIP מונדיאל', body:`{{full_name}},\nכלקוח מיוחד שלנו — 25% הנחה אקסקלוסיבית לכבוד המונדיאל! 🏅\nהצג/י הודעה זו בקופה ונדאג לך 💚 — השכונתית` },
+      { title:'⏰ מבצע לפני המשחק', body:`היי {{full_name}}! שעה לפני הקיקאוף ⏰\nתתחמשו בשכונתית — 2 ב-10₪ על כל המשקאות הקרים!\nיאללה לפני שהמשחק מתחיל ⚽🔥` },
+      { title:'🥇 ישראל במונדיאל!', body:`{{full_name}}, האמנו ועלינו! 🇮🇱⚽\nחוגגים עם שכונתית — היום הכל ב-15% הנחה!\nכי אנחנו ביחד — על המגרש ובשכונה 🏆💚` },
+    ];
+
+    function renderTemplates(){
+      $('#tplGrid').innerHTML = MUNDIAL_TEMPLATES.map((t,i)=>`
+        <div class="tpl-card" data-i="${i}">
+          <div class="tpl-title">${esc(t.title)}</div>
+          <div class="tpl-preview">${esc(t.body)}</div>
+        </div>`).join('');
+      $('#tplGrid').querySelectorAll('.tpl-card').forEach(c=>c.addEventListener('click',()=>{
+        $('#body').value = MUNDIAL_TEMPLATES[+c.dataset.i].body;
+        $('#body').focus();
+        toast('✅ תבנית נטענה — ערוך/י לפי הצורך');
+      }));
+    }
+    renderTemplates();
+
+    // ================= PRODUCTS =================
+    let _productsCache = [];
+    let _editingProduct = null;
+    let _pickerCache = [];
+
+    async function loadProducts() {
+      const r = await fetch('/api/admin/products');
+      if (r.status === 401) return location.href = '/admin/login';
+      const { products = [] } = await r.json();
+      _productsCache = products;
+      renderProducts(products);
+    }
+
+    function renderProducts(list) {
+      const body = $('#productBody');
+      if (!list.length) { body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--soft);padding:20px">אין מוצרים — הוסיפו מוצר, ייבאו מ-Excel, או טענו את הרשימה הראשונית 👆</td></tr>`; }
+      else body.innerHTML = list.map((p, i) => {
+        const disc = p.price_before > 0 ? Math.round((1 - p.price_after / p.price_before) * 100) : 0;
+        return `<tr>
+          <td style="color:var(--soft);font-size:12px">${i + 1}</td>
+          <td style="font-weight:600">${esc(p.name)}</td>
+          <td style="color:var(--soft);font-size:13px">${esc(p.category || '—')}</td>
+          <td style="text-align:center;text-decoration:line-through;color:var(--soft)">₪${p.price_before.toFixed(2)}</td>
+          <td style="text-align:center;font-weight:800;color:var(--green-dark)">₪${p.price_after.toFixed(2)}</td>
+          <td style="text-align:center">${disc > 0 ? `<span class="pill green">${disc}%-</span>` : '—'}</td>
+          <td style="display:flex;gap:6px">
+            <button class="btn ghost sm" onclick="editProduct('${esc(p.id)}')">עריכה</button>
+            <button class="btn danger sm" onclick="deleteProduct('${esc(p.id)}')">מחיקה</button>
+          </td>
+        </tr>`;
+      }).join('');
+      $('#prdCount').textContent = `סה"כ ${list.length} מוצרים`;
+    }
+
+    function filterProducts() {
+      const s = ($('#prdSearch').value || '').toLowerCase();
+      renderProducts(s ? _productsCache.filter(p =>
+        p.name.toLowerCase().includes(s) || (p.category || '').toLowerCase().includes(s)
+      ) : _productsCache);
+    }
+
+    function editProduct(id) {
+      const p = _productsCache.find(x => x.id === id); if (!p) return;
+      _editingProduct = id;
+      $('#prdName').value = p.name; $('#prdCat').value = p.category || '';
+      $('#prdBefore').value = p.price_before; $('#prdAfter').value = p.price_after;
+      $('#prdSubmit').textContent = '💾 עדכון מוצר'; $('#prdCancel').classList.remove('hidden');
+      document.getElementById('tab-products').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function deleteProduct(id) {
+      if (!confirm('למחוק את המוצר?')) return;
+      await fetch('/api/admin/products/' + encodeURIComponent(id), { method: 'DELETE' });
+      toast('🗑 מוצר נמחק'); loadProducts();
+    }
+
+    function resetProductForm() {
+      _editingProduct = null; $('#productForm').reset();
+      $('#prdSubmit').textContent = '➕ הוספת מוצר'; $('#prdCancel').classList.add('hidden');
+    }
+
+    $('#prdCancel').addEventListener('click', resetProductForm);
+
+    $('#productForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!$('#prdName').value.trim()) return toast('שם המוצר חובה');
+      const payload = { name: $('#prdName').value.trim(), category: $('#prdCat').value.trim(), price_before: parseFloat($('#prdBefore').value) || 0, price_after: parseFloat($('#prdAfter').value) || 0 };
+      try {
+        let r;
+        if (_editingProduct) r = await fetch('/api/admin/products/' + encodeURIComponent(_editingProduct), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        else r = await fetch('/api/admin/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (r.ok) { toast(_editingProduct ? '✅ מוצר עודכן' : '✅ מוצר נוסף'); resetProductForm(); loadProducts(); }
+        else { const d = await r.json().catch(()=>({})); toast('⚠ ' + (d.detail||d.error||'שגיאה')); }
+      } catch(err) { toast('⚠ שגיאת רשת: ' + err.message); }
+    });
+
+    $('#prdSeedBtn').addEventListener('click', async () => {
+      if (!confirm(`לטעון ${PRODUCT_CATALOG.length} מוצרים לרשימה? מוצרים קיימים לא יימחקו.`)) return;
+      $('#prdSeedBtn').disabled = true; $('#prdSeedBtn').textContent = '⏳ טוען...';
+      const r = await fetch('/api/admin/products/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ products: PRODUCT_CATALOG }) });
+      if (r.ok) { const d = await r.json(); toast(`✅ נטענו ${d.count} מוצרים בהצלחה`); loadProducts(); }
+      else toast('⚠ שגיאה בייבוא');
+      $('#prdSeedBtn').disabled = false; $('#prdSeedBtn').textContent = '⬇️ טען 120 מוצרים ראשוניים';
+    });
+
+    // ================= EXCEL IMPORT =================
+    let _excelRows = [];
+
+    function _detectCol(headers, candidates) {
+      const idx = headers.findIndex(h => candidates.some(c => String(h).toLowerCase().includes(c)));
+      return idx >= 0 ? idx : null;
+    }
+
+    $('#excelFile').addEventListener('change', async e => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (!raw.length) { toast('⚠ הקובץ ריק'); return; }
+
+        const headers = (raw[0] || []).map(h => String(h || '').trim());
+        const colName   = _detectCol(headers, ['שם', 'name', 'מוצר', 'product', 'תיאור']);
+        const colCat    = _detectCol(headers, ['קטגוריה', 'קטגוריית', 'category', 'סוג', 'type']);
+        const colBefore = _detectCol(headers, ['רגיל', 'לפני', 'before', 'original', 'מלא', 'מחיר מ', 'price_b', 'מקורי']);
+        const colAfter  = _detectCol(headers, ['מבצע', 'sale', 'after', 'price_a', 'הנחה', 'חדש']);
+
+        if (colName === null) { toast('⚠ לא נמצאה עמודת "שם המוצר" — בדוק שכותרת העמודה הראשונה מכילה "שם" או "מוצר"'); return; }
+
+        _excelRows = raw.slice(1)
+          .filter(r => String(r[colName] || '').trim())
+          .map(r => ({
+            name:         String(r[colName]  || '').trim(),
+            category:     colCat    !== null ? String(r[colCat]    || '').trim() : '',
+            price_before: colBefore !== null ? parseFloat(String(r[colBefore]).replace(/[^\d.]/g,'')) || 0 : 0,
+            price_after:  colAfter  !== null ? parseFloat(String(r[colAfter] ).replace(/[^\d.]/g,'')) || 0 : 0,
+          }));
+
+        if (!_excelRows.length) { toast('⚠ לא נמצאו שורות עם נתונים'); return; }
+
+        const prev = _excelRows.slice(0, 5);
+        $('#excelPreview').innerHTML = `
+          <div style="font-size:13px;color:#1a5c0a;font-weight:700;margin-bottom:8px">
+            נמצאו <b>${_excelRows.length}</b> מוצרים — תצוגה מקדימה (5 ראשונים):
+          </div>
+          <div style="overflow-x:auto">
+            <table style="font-size:12px;width:100%">
+              <thead><tr><th style="text-align:right">שם המוצר</th><th style="text-align:right">קטגוריה</th><th>מחיר רגיל</th><th>מחיר מבצע</th></tr></thead>
+              <tbody>${prev.map(p=>`<tr><td style="font-weight:600">${esc(p.name)}</td><td style="color:var(--soft)">${esc(p.category)||'—'}</td><td style="text-align:center">₪${p.price_before.toFixed(2)}</td><td style="text-align:center;color:var(--green-dark);font-weight:700">₪${p.price_after.toFixed(2)}</td></tr>`).join('')}</tbody>
+            </table>
+          </div>`;
+        $('#excelImportBtn').textContent = `✅ ייבא ${_excelRows.length} מוצרים`;
+        $('#excelImportBtn').classList.remove('hidden');
+        $('#excelClearBtn').classList.remove('hidden');
+      } catch(err) { toast('⚠ שגיאה בקריאת הקובץ: ' + err.message); }
+    });
+
+    $('#excelImportBtn').addEventListener('click', async () => {
+      if (!_excelRows.length) return;
+      if (!confirm(`לייבא ${_excelRows.length} מוצרים? מוצרים קיימים לא יימחקו.`)) return;
+      $('#excelImportBtn').disabled = true; $('#excelImportBtn').textContent = '⏳ מייבא...';
+      try {
+        const r = await fetch('/api/admin/products/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ products: _excelRows }) });
+        if (r.ok) {
+          const d = await r.json();
+          toast(`✅ יובאו ${d.count} מוצרים בהצלחה`);
+          clearExcelImport(); loadProducts();
+        } else {
+          const d = await r.json().catch(()=>({}));
+          toast('⚠ ' + (d.detail || d.error || 'שגיאה בייבוא'));
+        }
+      } catch(err) { toast('⚠ שגיאת רשת: ' + err.message); }
+      $('#excelImportBtn').disabled = false;
+    });
+
+    $('#excelClearBtn').addEventListener('click', clearExcelImport);
+    function clearExcelImport() {
+      _excelRows = [];
+      $('#excelFile').value = '';
+      $('#excelPreview').innerHTML = '';
+      $('#excelImportBtn').classList.add('hidden');
+      $('#excelClearBtn').classList.add('hidden');
+    }
+
+    // ================= PRODUCT PICKER (for promotions) =================
+    async function openProductPicker() {
+      if (!_pickerCache.length) {
+        try {
+          const r = await fetch('/api/admin/products');
+          if (r.ok) {
+            const { products = [] } = await r.json();
+            _pickerCache = products.length ? products : PRODUCT_CATALOG;
+          } else {
+            _pickerCache = PRODUCT_CATALOG;
+          }
+        } catch {
+          _pickerCache = PRODUCT_CATALOG;
+        }
+      }
+      renderPickerGrid(_pickerCache);
+      document.getElementById('productPickerPanel').classList.remove('hidden');
+      $('#pickerSearch').focus();
+    }
+
+    function renderPickerGrid(list) {
+      const el = document.getElementById('pickerGrid');
+      const empty = document.getElementById('pickerEmpty');
+      if (!list.length) { el.innerHTML = ''; empty.classList.remove('hidden'); return; }
+      empty.classList.add('hidden');
+      el.innerHTML = list.map((p, i) => {
+        const disc = p.price_before > 0 ? Math.round((1 - p.price_after / p.price_before) * 100) : 0;
+        return `<div class="picker-card" data-idx="${i}" style="background:var(--cream);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;transition:.15s">
+          <div style="font-weight:700;font-size:13.5px;margin-bottom:4px">${esc(p.name)}</div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:13px">
+            <span style="text-decoration:line-through;color:var(--soft)">₪${Number(p.price_before).toFixed(2)}</span>
+            <span style="font-weight:900;color:var(--green-dark)">₪${Number(p.price_after).toFixed(2)}</span>
+            ${disc > 0 ? `<span class="pill green">${disc}%-</span>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+      el.querySelectorAll('.picker-card').forEach(c => {
+        c.addEventListener('mouseenter', () => c.style.background = '#f0fbeb');
+        c.addEventListener('mouseleave', () => c.style.background = 'var(--cream)');
+        c.addEventListener('click', () => {
+          const p = list[+c.dataset.idx]; if (!p) return;
+          $('#pEmoji').value = '🛒';
+          $('#pTitle').value = p.name;
+          $('#pBadge').value = `₪${Number(p.price_after).toFixed(2)}`;
+          $('#pDesc').value = `מחיר מבצע: ₪${Number(p.price_after).toFixed(2)} | מחיר רגיל: ₪${Number(p.price_before).toFixed(2)}`;
+          document.getElementById('productPickerPanel').classList.add('hidden');
+          $('#pickerSearch').value = '';
+          toast(`✅ "${p.name}" נטען לטופס המבצע`);
+        });
+      });
+    }
+
+    document.getElementById('openProductPicker').addEventListener('click', openProductPicker);
+    document.getElementById('closeProductPicker').addEventListener('click', () => document.getElementById('productPickerPanel').classList.add('hidden'));
+    document.getElementById('pickerSearch').addEventListener('input', function() {
+      const s = this.value.toLowerCase().trim();
+      const filtered = s ? _pickerCache.filter(p => p.name.toLowerCase().includes(s)) : _pickerCache;
+      renderPickerGrid(filtered);
+    });
+
+    // ================= PRODUCT CATALOG (seed data from PDF) =================
+    const PRODUCT_CATALOG = [
+      {name:'חלב יטבתה מועשר 1 ליטר',price_before:11.90,price_after:7.50},
+      {name:'חלב נטול לקטוז תנובה',price_before:11.90,price_after:7.00},
+      {name:'ביצת קינדר',price_before:7.00,price_after:4.00},
+      {name:'קליק קורנפלקס',price_before:8.90,price_after:6.10},
+      {name:'ממרח שוקולד ואגוזי לוז נוטלה 400 גרם',price_before:24.90,price_after:16.90},
+      {name:'פיוז טי בטעם אפרסק',price_before:9.00,price_after:4.50},
+      {name:'פרינגלס גבינת צ\'דר אישי 40 גרם',price_before:5.90,price_after:3.20},
+      {name:'פירורי לחם זארובי 1 קילו',price_before:12.90,price_after:8.00},
+      {name:'מי עדן חצי ליטר',price_before:7.00,price_after:2.50},
+      {name:'שוקו יטבתה בבקבוק 250 מ"ל',price_before:6.90,price_after:4.50},
+      {name:'משקה אלוורה בטעם תפוח 300 מ"ל',price_before:10.90,price_after:6.00},
+      {name:'משקה אלוורה בטעם אפרסק 300 מ"ל',price_before:10.90,price_after:6.00},
+      {name:'XL 250 ML',price_before:8.00,price_after:2.70},
+      {name:'שמנת לבישול 15% יטבתה',price_before:9.90,price_after:7.00},
+      {name:'קצפת צמחית יטבתה מעודנת 21%',price_before:10.90,price_after:6.00},
+      {name:'ביצים גודל L 12 יחידות',price_before:19.90,price_after:12.00},
+      {name:'קטשופ היינץ 50% פחות סוכר',price_before:13.90,price_after:10.90},
+      {name:'גבינה צהובה עמק 400 גרם',price_before:33.90,price_after:23.35},
+      {name:'חלב נטול לקטוז',price_before:10.90,price_after:8.80},
+      {name:'לבבות דקל חתוך',price_before:10.00,price_after:6.00},
+      {name:'נמס אייס פחית',price_before:9.00,price_after:6.00},
+      {name:'מארז הפסקת אוכל קורנפלקס',price_before:13.90,price_after:10.70},
+      {name:'קליק חום לבן',price_before:8.90,price_after:5.50},
+      {name:'קליק כריות',price_before:8.90,price_after:5.50},
+      {name:'קליק ביסקוויט',price_before:8.90,price_after:5.50},
+      {name:'אם אנד אם עדשי שוקולד קריספיים',price_before:16.90,price_after:12.00},
+      {name:'מארז עדשי שוקולד אם אנד אם',price_before:17.90,price_after:12.00},
+      {name:'קראנץ\' פרה שוקולד חלב חום',price_before:9.90,price_after:6.50},
+      {name:'קראנץ\' שוקולד לבן ביסקוויט',price_before:9.90,price_after:6.50},
+      {name:'מייק אנד אייק פירות יער',price_before:10.90,price_after:6.70},
+      {name:'גרעיני תירס מתוק',price_before:4.90,price_after:1.25},
+      {name:'קולה רגיל פחית',price_before:8.00,price_after:2.90},
+      {name:'פנטה פחית',price_before:8.00,price_after:2.90},
+      {name:'ספרייט פחית',price_before:8.00,price_after:2.90},
+      {name:'קולה זירו פחית',price_before:8.00,price_after:2.90},
+      {name:'קולה זירו קטן',price_before:9.00,price_after:3.00},
+      {name:'ממרח מחמאת לורפק עם מלח',price_before:21.90,price_after:15.45},
+      {name:'דנונה קראנץ\' יוגורט',price_before:5.90,price_after:4.10},
+      {name:'קולה 500 מ"ל',price_before:9.00,price_after:3.00},
+      {name:'קינדר ג\'וי שלישייה',price_before:18.90,price_after:13.25},
+      {name:'תפוצ\'יפס בטעם טבעי',price_before:6.00,price_after:2.65},
+      {name:'שקדי מרק 100 גרם',price_before:6.90,price_after:4.38},
+      {name:'שמנת מתוקה להקצפה',price_before:11.90,price_after:8.40},
+      {name:'גבינת שמנת ארלה',price_before:16.90,price_after:13.04},
+      {name:'שמן קנולה מזוכך',price_before:9.90,price_after:6.56},
+      {name:'בקבוק שמן זית יד מרדכי',price_before:18.90,price_after:13.63},
+      {name:'שוקולד מריר',price_before:9.90,price_after:6.50},
+      {name:'שוקולד פרה',price_before:9.90,price_after:6.80},
+      {name:'שוופס תפוח',price_before:9.00,price_after:3.00},
+      {name:'שוופס אפרסק',price_before:9.00,price_after:3.00},
+      {name:'קפה טורקי קלוי וטחון',price_before:12.90,price_after:6.90},
+      {name:'קמח חיטה לבן מנופה',price_before:7.90,price_after:5.71},
+      {name:'בקבוק קטשופ אסם',price_before:3.00,price_after:1.00},
+      {name:'קוסקוס סולת דק',price_before:6.90,price_after:4.59},
+      {name:'קוקה קולה זירו קטן',price_before:9.00,price_after:3.00},
+      {name:'מארז סלמי תה מעושן ופסטרמה',price_before:33.90,price_after:27.72},
+      {name:'אורז פרסי קלאסי',price_before:13.90,price_after:10.45},
+      {name:'פריכיות אורז תחתית שוקולד חלב',price_before:11.90,price_after:8.02},
+      {name:'פריכיות אורז תחתית שוקולד לבן',price_before:11.90,price_after:8.02},
+      {name:'פרינגלס קטן',price_before:5.90,price_after:1.00},
+      {name:'פרילי טבע',price_before:5.90,price_after:4.46},
+      {name:'פלפל שחור טחון',price_before:9.90,price_after:6.08},
+      {name:'פירורי לחם מוזהבים הנמל',price_before:9.90,price_after:6.02},
+      {name:'Blu Energy Drink',price_before:8.00,price_after:2.67},
+      {name:'פודינג אינסטנט בטעם וניל',price_before:5.90,price_after:4.42},
+      {name:'משקה מוגז ספרייט זירו',price_before:9.00,price_after:3.00},
+      {name:'סוכר לבן 1 ק"ג',price_before:12.90,price_after:8.63},
+      {name:'סודה סינגה',price_before:7.00,price_after:2.20},
+      {name:'חטיפי נש צ\'אנס 200 גרם',price_before:17.90,price_after:6.53},
+      {name:'פסטה ברוטב עגבניות ועשבי תיבול',price_before:6.90,price_after:3.83},
+      {name:'נוטלה 200 גרם',price_before:14.90,price_after:10.09},
+      {name:'נודלס אישי בטעם עוף',price_before:6.90,price_after:4.98},
+      {name:'פסטה אינסטנט מק אנד צ\'יז',price_before:6.90,price_after:2.43},
+      {name:'מעדן מילקי טופ עם עדשים',price_before:5.90,price_after:3.97},
+      {name:'מחמאה מרגרינה לאפייה',price_before:6.90,price_after:5.04},
+      {name:'מיץ לימון משומר',price_before:7.90,price_after:3.40},
+      {name:'רסק עגבניות יכין',price_before:4.90,price_after:3.09},
+      {name:'יטבתה חלב מועשר',price_before:11.90,price_after:7.71},
+      {name:'משקה טרופיקש',price_before:3.00,price_after:1.10},
+      {name:'נתחי טונה בהירה בשמן',price_before:7.00,price_after:3.00},
+      {name:'נייטשר וואלי',price_before:12.90,price_after:9.27},
+      {name:'השחר העולה שוקולד למריחה 500 גרם',price_before:16.90,price_after:12.76},
+      {name:'דוריטוס חמוץ חריף 185 גרם',price_before:6.00,price_after:2.59},
+      {name:'מרק קנור עוף פרווה בשקית',price_before:17.90,price_after:10.98},
+      {name:'פרוסות גבינה תנובה',price_before:18.90,price_after:13.54},
+      {name:'מאסטר שף בקר',price_before:6.90,price_after:4.98},
+      {name:'משקה אנרגיה בלו 250 מ"ל',price_before:8.00,price_after:2.92},
+      {name:'ביסלי גריל',price_before:6.00,price_after:2.99},
+      {name:'ביסלי בצל',price_before:6.00,price_after:2.99},
+      {name:'רוטב אלף האיים אסם',price_before:15.90,price_after:11.79},
+      {name:'משקה שיבולת שועל WHITE',price_before:13.90,price_after:10.50},
+      {name:'פסטה נפוליטנה',price_before:4.00,price_after:1.00},
+      {name:'XL TEN',price_before:8.00,price_after:3.18},
+      {name:'מונסטר אנרג\'י',price_before:9.90,price_after:6.24},
+      {name:'ביצים רגילות גודל גדול 12',price_before:14.20,price_after:13.14},
+      {name:'פחית פאנטה',price_before:8.00,price_after:3.90},
+      {name:'בלו משקה אנרגיה',price_before:8.00,price_after:3.90},
+      {name:'שוקולד נוטלה',price_before:18.90,price_after:12.90},
+      {name:'רסק עגבניות יחידה',price_before:4.20,price_after:1.85},
+      {name:'מיקס עלית אריזה משפחתית',price_before:33.90,price_after:27.09},
+      {name:'מלח',price_before:8.90,price_after:5.96},
+      {name:'מנה חמה',price_before:5.80,price_after:3.20},
+      {name:'פחית זירו',price_before:8.00,price_after:3.90},
+      {name:'קוטג\' תנובה בקטנה',price_before:6.90,price_after:2.41},
+      {name:'קטשופ אסם',price_before:9.90,price_after:6.90},
+      {name:'חומוס אחלה 700 גרם',price_before:12.90,price_after:9.70},
+      {name:'חלב סויה וניל',price_before:12.90,price_after:9.14},
+      {name:'חלב שיבולת שועל',price_before:11.90,price_after:6.90},
+      {name:'חלב תנובה 1 ליטר',price_before:11.90,price_after:7.90},
+      {name:'מיונז תלמה 1 ליטר',price_before:13.90,price_after:10.90},
+      {name:'שטראוס מילקי טופ מגולגלת',price_before:5.90,price_after:3.97},
+      {name:'ביסלי בצל אסם',price_before:6.00,price_after:2.99},
+      {name:'ביסלי ברביקיו אסם',price_before:6.00,price_after:2.99},
+      {name:'ביצים מארז 12',price_before:14.20,price_after:13.14},
+      {name:'במבה אסם',price_before:6.00,price_after:3.43},
+      {name:'גבינה לבנה',price_before:6.90,price_after:5.00},
+      {name:'דניאלה מעדן תות בננה',price_before:4.60,price_after:1.85},
+      {name:'ספיד סטיק',price_before:15.90,price_after:10.90},
+      {name:'אקטימל דנונה 8 יחידות',price_before:19.90,price_after:14.85},
+      {name:'ביסלי בצל',price_before:6.00,price_after:2.99},
+    ];
 
     // init
     loadDashboard();

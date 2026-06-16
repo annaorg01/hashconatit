@@ -3,7 +3,7 @@
 //  LEGAL: only leads with consent_granted = 1 are ever loaded
 //  (see Leads.consented), enforcing Israeli Spam Law (חוק הספאם).
 // ==========================================================
-import { Leads, Campaigns } from '../sheets.js';
+import { Leads, Campaigns, SmsLog } from '../sheets.js';
 import {
   sendSMS, sendWhatsApp, sendEmail,
   renderTemplate, mediaUrlFor, forwardCampaignWebhook,
@@ -15,17 +15,16 @@ export async function resolveAudience(audience) {
   if (audience.mode === 'single') {
     return Leads.consented({ phone: audience.phone, search: audience.search });
   }
-  // group
   return Leads.consented({ machine_id: audience.machine_id || undefined });
 }
 
 export async function runCampaign(campaign) {
-  const channels = JSON.parse(campaign.channels);
-  const audience = JSON.parse(campaign.audience);
+  const channels   = JSON.parse(campaign.channels);
+  const audience   = JSON.parse(campaign.audience);
   const recipients = await resolveAudience(audience);
 
-  const mediaUrl = mediaUrlFor(campaign.media_path);
-  const mediaAbsPath = campaign.media_path
+  const mediaUrl      = mediaUrlFor(campaign.media_path);
+  const mediaAbsPath  = campaign.media_path
     ? resolve(process.cwd(), 'uploads', campaign.media_path)
     : null;
 
@@ -33,16 +32,46 @@ export async function runCampaign(campaign) {
   let sent = 0;
 
   for (const lead of recipients) {
-    const body = renderTemplate(campaign.body, lead);
+    const body    = renderTemplate(campaign.body, lead);
     const results = [];
-    if (channels.includes('sms'))      results.push(await sendSMS(lead, body, mediaUrl));
-    if (channels.includes('whatsapp')) results.push(await sendWhatsApp(lead, body, mediaUrl));
-    if (channels.includes('email'))    results.push(await sendEmail(lead, body, mediaUrl, mediaAbsPath, campaign.media_path));
+
+    if (channels.includes('sms')) {
+      const r = await sendSMS(lead, body, mediaUrl);
+      results.push(r);
+      await SmsLog.add({
+        lead_id: lead.id, phone: lead.phone, full_name: lead.full_name,
+        message_body: body, channel: 'sms',
+        status: r.status, error: r.error || null,
+        campaign_id: campaign.id, machine_id: lead.machine_id,
+      });
+    }
+
+    if (channels.includes('whatsapp')) {
+      const r = await sendWhatsApp(lead, body, mediaUrl);
+      results.push(r);
+      await SmsLog.add({
+        lead_id: lead.id, phone: lead.phone, full_name: lead.full_name,
+        message_body: body, channel: 'whatsapp',
+        status: r.status, error: r.error || null,
+        campaign_id: campaign.id, machine_id: lead.machine_id,
+      });
+    }
+
+    if (channels.includes('email')) {
+      const r = await sendEmail(lead, body, mediaUrl, mediaAbsPath, campaign.media_path);
+      results.push(r);
+      await SmsLog.add({
+        lead_id: lead.id, phone: lead.phone, full_name: lead.full_name,
+        message_body: body, channel: 'email',
+        status: r.status, error: r.error || null,
+        campaign_id: campaign.id, machine_id: lead.machine_id,
+      });
+    }
+
     if (results.some(r => r.status === 'sent')) sent++;
     log.push({ lead_id: lead.id, name: lead.full_name, results });
   }
 
-  // Optional mirror to Make.com.
   await forwardCampaignWebhook({
     campaign_id: campaign.id,
     channels, body: campaign.body,
@@ -61,7 +90,7 @@ export async function runCampaign(campaign) {
 // Background poller for scheduled campaigns (checked every minute).
 export function startScheduler() {
   setInterval(async () => {
-    const due = Campaigns.dueScheduled(new Date().toISOString());
+    const due = await Campaigns.dueScheduled(new Date().toISOString());
     for (const c of due) {
       try { await runCampaign(c); }
       catch (e) { await Campaigns.update(c.id, { status: 'failed', result_log: JSON.stringify({ error: e.message }) }); }
