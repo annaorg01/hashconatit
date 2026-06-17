@@ -124,8 +124,12 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
 
 app.post('/api/admin/logout', (req, res) => { clearSession(res); res.json({ ok: true }); });
 
-app.get('/admin/login', (req, res) => res.sendFile(join(ROOT, 'public', 'login.html')));
+app.get('/admin/login', (req, res) => {
+  if (IS_SERVERLESS) return res.redirect(302, '/login.html');
+  res.sendFile(join(ROOT, 'public', 'login.html'));
+});
 app.get('/admin', requireAuth, (req, res) => {
+  if (IS_SERVERLESS) return res.redirect(302, '/admin.html');
   res.set('Cache-Control', 'no-store');
   res.sendFile(join(ROOT, 'public', 'admin.html'));
 });
