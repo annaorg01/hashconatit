@@ -11,11 +11,11 @@ import { initSchema, Leads, Campaigns, Promotions, SmsLog, Machines, Products } 
 import { issueSession, clearSession, checkCredentials, requireAuth } from './auth.js';
 import { runCampaign } from './services/broadcaster.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
-
 // בסביבת serverless (Netlify/Lambda) רק /tmp ניתן לכתיבה
 const IS_SERVERLESS = !!process.env.NETLIFY || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+// import.meta.url is empty when bundled by esbuild in CJS mode
+const __dirname = import.meta.url ? dirname(fileURLToPath(import.meta.url)) : process.cwd();
+const ROOT = IS_SERVERLESS ? process.cwd() : resolve(__dirname, '..');
 const UPLOAD_DIR = IS_SERVERLESS ? '/tmp/uploads' : join(ROOT, 'uploads');
 
 try { mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
